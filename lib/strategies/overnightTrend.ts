@@ -11,13 +11,10 @@ import {
 import console from '../logging'
 import { EXIT_TRADING_Q_NAME } from '../queue'
 import {
-  apiResponseObject,
   attemptBrokerOrders,
   ensureMarginForBasketOrder,
   getExpiryTradingSymbol,
-  getHedgeForStrike,
   getIndexInstruments,
-  getStrikeByDelta,
   remoteOrderSuccessEnsurer,
   SIGNALX_URL,
   syncGetKiteInstance,
@@ -115,7 +112,6 @@ async function overnightTrend (args: OTS_TRADE) {
       _nextTradingQueue = EXIT_TRADING_Q_NAME
     } = args
     const {
-      lotSize,
       nfoSymbol,
       strikeStepSize,
       exchange,
@@ -139,7 +135,7 @@ async function overnightTrend (args: OTS_TRADE) {
   {
       strike=atmStrike - distanceFromAtm * strikeStepSize
   }
-      const { PE_STRING, CE_STRING } = (await getExpiryTradingSymbol({
+      const { PE_STRING, CE_STRING,LOT_SIZE } = (await getExpiryTradingSymbol({
         nfoSymbol,
         strike: strike,
         expiry: expiryType
@@ -155,7 +151,7 @@ async function overnightTrend (args: OTS_TRADE) {
     const orders:KiteOrder[]=[createOrder({
         symbol,
         lots,
-        lotSize,
+        lotSize:LOT_SIZE,
         user: user!,
         orderTag: orderTag!,
         productType,

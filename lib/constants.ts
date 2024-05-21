@@ -45,7 +45,7 @@ export interface KITE_INSTRUMENT_INFO {
 
 export const INSTRUMENT_DETAILS: Record<INSTRUMENTS, INSTRUMENT_PROPERTIES> = {
   [INSTRUMENTS.NIFTY]: {
-    lotSize: 50,
+    lotSize: 25,
     displayName: 'NIFTY',
     underlyingSymbol: 'NIFTY 50',
     nfoSymbol: 'NIFTY',
@@ -60,10 +60,10 @@ export const INSTRUMENT_DETAILS: Record<INSTRUMENTS, INSTRUMENT_PROPERTIES> = {
     nfoSymbol: 'BANKNIFTY',
     exchange: 'NSE',
     strikeStepSize: 100,
-    freezeQty: 1200
+    freezeQty: 900
   },
   [INSTRUMENTS.FINNIFTY]: {
-    lotSize: 40,
+    lotSize: 25,
     displayName: 'FINNIFTY',
     underlyingSymbol: 'NIFTY FIN SERVICE',
     nfoSymbol: 'FINNIFTY',
