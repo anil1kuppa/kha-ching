@@ -37,7 +37,8 @@ import memoizer from 'memoizee'
 export type TradingSymbolInterface = KITE_INSTRUMENT_INFO
 export interface StrikeInterface {
   PE_STRING: string
-  CE_STRING: string
+  CE_STRING: string,
+  LOT_SIZE:number
 }
 
 interface GET_LTP_ARGS {
@@ -328,12 +329,15 @@ export const getCurrentExpiryTradingSymbol = async ({
     ?.tradingsymbol
   const ceStrike = relevantRows?.find(item => item.instrument_type === 'CE')
     ?.tradingsymbol
+    const lotSize=relevantRows?.find(item => item.instrument_type === 'PE')
+    ?.lot_size
 
   if (!peStrike || !ceStrike) return null
 
   return {
     PE_STRING: peStrike,
-    CE_STRING: ceStrike
+    CE_STRING: ceStrike,
+    LOT_SIZE :parseInt(lotSize!)
   }
 }
 
@@ -365,12 +369,15 @@ export const getNextExpiryTradingSymbol = async ({
     ?.tradingsymbol
   const ceStrike = relevantRows?.find(item => item.instrument_type === 'CE')
     ?.tradingsymbol
+   const lotSize=relevantRows?.find(item => item.instrument_type === 'PE')
+    ?.lot_size
 
   if (!peStrike || !ceStrike) return null
 
   return {
     PE_STRING: peStrike,
-    CE_STRING: ceStrike
+    CE_STRING: ceStrike,
+    LOT_SIZE :parseInt(lotSize!)
   }
 }
 
@@ -420,12 +427,15 @@ export const getMonthlyExpiryTradingSymbol = async ({
     ?.tradingsymbol
   const ceStrike = relevantRows?.find(item => item.instrument_type === 'CE')
     ?.tradingsymbol
+  const lotSize=relevantRows?.find(item => item.instrument_type === 'PE')
+  ?.lot_size
 
   if (!peStrike || !ceStrike) return null
 
   return {
     PE_STRING: peStrike,
-    CE_STRING: ceStrike
+    CE_STRING: ceStrike,
+    LOT_SIZE :parseInt(lotSize!)
   }
 }
 
@@ -1376,6 +1386,7 @@ return ({...items.value,id:items.id})
     if (mockOrders) {
       console.log('mock order', orderProps)
     }
+    console.log(`[remoteOrderSuccessEnsurer] Order details are ${JSON.stringify(orderProps)}`)
     const orderAckResponse = mockOrders
       ? { order_id: '' }
       : await kite.placeOrder(kite.VARIETY_REGULAR, orderProps)

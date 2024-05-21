@@ -45,7 +45,8 @@ export async function getATMStraddle (
 ): Promise<{
   PE_STRING: string
   CE_STRING: string
-  atmStrike: number
+  atmStrike: number,
+  LOT_SIZE:number
 }> {
   const {
     _kite,
@@ -100,7 +101,7 @@ export async function getATMStraddle (
     const atmStrike =
       Math.round(underlyingLTP / strikeStepSize!) * strikeStepSize!
 
-    const { PE_STRING, CE_STRING } = (await getExpiryTradingSymbol({
+    const { PE_STRING, CE_STRING,LOT_SIZE} = (await getExpiryTradingSymbol({
       nfoSymbol,
       strike: atmStrike,
       expiry: expiryType
@@ -115,7 +116,8 @@ export async function getATMStraddle (
         return {
           PE_STRING,
           CE_STRING,
-          atmStrike
+          atmStrike,
+          LOT_SIZE
         }
       }
 
@@ -152,7 +154,8 @@ export async function getATMStraddle (
     return {
       PE_STRING,
       CE_STRING,
-      atmStrike
+      atmStrike,
+      LOT_SIZE
     }
   } catch (e) {
     console.log('[getATMStraddle] exception', e)
@@ -228,7 +231,6 @@ async function atmStraddle ({
     underlyingSymbol,
     exchange,
     nfoSymbol,
-    lotSize,
     strikeStepSize
   } = INSTRUMENT_DETAILS[instrument]
 
@@ -251,7 +253,7 @@ async function atmStraddle ({
       expiryType
     })
 
-    const { PE_STRING, CE_STRING, atmStrike } = straddle
+    const { PE_STRING, CE_STRING, atmStrike,LOT_SIZE } = straddle
 
     let allOrdersLocal: KiteOrder[] = []
     let hedgeOrdersLocal: KiteOrder[] = []
@@ -273,7 +275,7 @@ async function atmStraddle ({
         createOrder({
           symbol:symbol!,
           lots,
-          lotSize,
+          lotSize:LOT_SIZE,
           user: user!,
           orderTag: orderTag!,
           transactionType: kite.TRANSACTION_TYPE_BUY,
@@ -287,7 +289,7 @@ async function atmStraddle ({
       createOrder({
         symbol,
         lots,
-        lotSize,
+        lotSize:LOT_SIZE,
         user: user!,
         orderTag: orderTag!,
         productType,
