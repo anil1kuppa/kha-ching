@@ -1502,6 +1502,29 @@ return ({...items.value,id:items.id})
   }
 }
 
+
+// gets the current data from DB
+export const getValuesfromDB = async (
+    id:string
+): Promise<Record<string, unknown>> => {
+    const endpoint = `${orclsodaUrl}/dailyplan/${id}`
+  
+    const { data } = await axios(endpoint)
+    return data
+  }
+// puts the value to DB
+export const putValuestoDb = async (
+    id:string,
+    data:any
+) => {
+    const endpoint = `${orclsodaUrl}/dailyplan/${id}`
+  
+    await axios.put(
+        endpoint,
+        data
+      )
+    
+  }
 // patches and returns stale data
 export const patchDbTrade = async ({
   id,
