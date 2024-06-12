@@ -12,7 +12,6 @@ import withSession from '../../lib/session'
 import {
   isMarketOpen,
   isMockOrder,
-  premiumAuthCheck,
   orclsodaUrl,
   logDeep
 } from '../../lib/utils'
