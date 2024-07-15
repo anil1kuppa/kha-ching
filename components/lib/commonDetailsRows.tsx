@@ -19,8 +19,10 @@ const CommonDetailsRows = ({
   squareOffTime,
   isMaxProfitEnabled,
   maxProfitPoints,
+  trailingMaxProfitPoints,
   isMaxLossEnabled,
   maxLossPoints,
+  trailingMaxLossPoints,
   currentPoints,
   productType,
   volatilityType,
@@ -74,8 +76,8 @@ const CommonDetailsRows = ({
       { value: EXIT_STRATEGIES_DETAILS[exitStrategy].label }
     ],
     [{ value: 'SL' }, { value: `${slmPercent as string}%` }],
-    isMaxProfitEnabled?[{value: 'Max Profit '},{value:maxProfitPoints}]:null,
-    isMaxLossEnabled?[{value: 'Max Loss '},{value:maxLossPoints}]:null,
+    [{value: 'Max Profit '},{value:trailingMaxProfitPoints}],
+    [{value: 'Max Loss '},{value:trailingMaxLossPoints}],
     [{value:'Tag'},{value:orderTag}],
     (isMaxLossEnabled||isMaxProfitEnabled)
     ? [{ value: 'Current Points' }, { value: currentPoints }]
