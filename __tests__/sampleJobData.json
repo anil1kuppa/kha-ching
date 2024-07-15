@@ -1,4 +1,4 @@
-1. job.data for tradingQ:
+//1. job.data for tradingQ:
 {
   "exitStrategy": "INDIVIDUAL_LEG_SLM_1X",
   "autoSquareOffProps": {
@@ -10,7 +10,9 @@
   "instrument": "NIFTY",
   "squareOffTime": "2022-05-03T15:20:09+05:30",
   "productType": "MIS",
-  "maxProfitPoints": 20,
+  //"maxProfitPoints": 20,
+  "trailingMaxProfitPoints":20,
+  "trailingMaxLossPoints":-12,
   "expireIfUnsuccessfulInMins": 10,
   "onSquareOffSetAborted": false,
   "expiresAt": "2022-05-03T15:17:00+05:30",
@@ -19,7 +21,7 @@
   "expiryType": "CURRENT",
   "lots": 1,
   "thresholdSkewPercent": 20,
-  "maxLossPoints": 90,
+  //"maxLossPoints": 90,
   "dayparam": "20220503",
   "takeTradeIrrespectiveSkew": true,
   "slmPercent": 30,

@@ -224,7 +224,7 @@ const TradeSetupForm = ({
     <FormControl component='fieldset'>
       <FormGroup>
         <FormControlLabel
-          key='maxLossPoints'
+          key='trailingMaxLossPoints'
           label='Square off if losses breach (in points)'
           control={
             <Checkbox
@@ -241,10 +241,10 @@ const TradeSetupForm = ({
     <TextField
     fullWidth
     name='maxLossPoints'
-    value={state.maxLossPoints}
+    value={state.trailingMaxLossPoints}
     onChange={e =>
       onChange({
-        maxLossPoints: +e.target.value || undefined
+        trailingMaxLossPoints: +e.target.value || undefined
       })
     }
     label='Max Loss in points'
@@ -274,10 +274,10 @@ const TradeSetupForm = ({
     <TextField
     fullWidth
     name='maxProfitPoints'
-    value={state.maxProfitPoints}
+    value={state.trailingMaxProfitPoints}
     onChange={e =>
       onChange({
-        maxProfitPoints: +e.target.value || undefined
+        trailingMaxProfitPoints: +e.target.value || undefined
       })
     }
     label='Max Profit in points'

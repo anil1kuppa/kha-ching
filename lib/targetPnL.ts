@@ -30,10 +30,8 @@ const targetPnL = async ({
     rawKiteOrdersResponse: KiteOrder []
   }) :Promise<any> =>
   {
-    const {maxLossPoints,isMaxLossEnabled,orderTag,isMaxProfitEnabled,
-      maxProfitPoints
-    ,isAutoSquareOffEnabled,
-    autoSquareOffProps:{time}={}} = initialJobData;
+    const {isMaxLossEnabled,orderTag,isMaxProfitEnabled,
+    isAutoSquareOffEnabled,autoSquareOffProps:{time}={}} = initialJobData;
 
 
     if (getTimeLeftInMarketClosingMs() < 0 ||
@@ -67,11 +65,11 @@ const targetPnL = async ({
   try {
         dbData=await getValuesfromDB(initialJobData.id!)
 
-    if (!(dbData?.trailingMaxProfitPoints))
-     {
-        dbData.trailingMaxProfitPoints=maxProfitPoints
-        dbData.trailingMaxLossPoints=-1*maxLossPoints!
-     }
+    // if (!(dbData?.trailingMaxProfitPoints))
+    //  {
+    //     dbData.trailingMaxProfitPoints=maxProfitPoints
+    //     dbData.trailingMaxLossPoints=-1*maxLossPoints!
+    //  }
     dbData.lastTargetAt=dayjs().format();
     dbData.currentPoints=totalPoints.points;
     // await patchDbTrade({
@@ -108,7 +106,7 @@ const targetPnL = async ({
     //   console.log('[targetPnL]error in squaring Off', error)
 
     // }
-    return Promise.reject(new Error('[targetPnL] Updated with new profit ${dbData.trailingMaxProfitPoints} and SL ${dbData.trailingMaxLossPoints}'));
+    return Promise.reject(new Error(`[targetPnL] Updated with new profit ${dbData.trailingMaxProfitPoints} and SL ${dbData.trailingMaxLossPoints}`));
     //Square off the tag
   }
   else if
