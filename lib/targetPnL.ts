@@ -54,7 +54,7 @@ const targetPnL = async ({
                 getInstrumentPrice(kite,current.tradingsymbol, 'NFO'));
       currentPosition.points+=current.points+ (current.quantity>0?underlyingLTP:-1*underlyingLTP); 
       currentPosition.areAllOrdersCompleted=false;
-
+      
     }
     return currentPosition;
   },Promise.resolve({points:0,
@@ -72,6 +72,7 @@ const targetPnL = async ({
     //  }
     dbData.lastTargetAt=dayjs().format();
     dbData.currentPoints=totalPoints.points;
+    console.log(`[targetPnL] Current points for ${orderTag}: ${dbData.currentPoints}`);
     // await patchDbTrade({
     //   id: initialJobData.id!,
     //   patchProps: {
