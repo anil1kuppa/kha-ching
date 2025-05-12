@@ -106,5 +106,5 @@
   "cacheDirectories": [
     ".next/cache"
   ],
-  "packageManager": "yarn@4.9.1"
+  "packageManager": "yarn@1.22.22"
 }
