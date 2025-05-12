@@ -14,7 +14,7 @@ import {
   ms
 } from './utils';
 
-const redisUrl = `${process.env.REDIS_URL as string}?enableReadyCheck=false&maxRetriesPerRequest=null`
+const redisUrl = `${process.env.REDIS_URL as string}`
 
 // just a hack to ensure if someone left a placeholder in env variables
 export const QID:string = process.env.KITE_API_KEY!
@@ -24,7 +24,7 @@ export const AUTO_SQUARE_OFF_Q_NAME = `autoSquareOffQueue_${QID}`
 //export const WATCHER_Q_NAME = `watcherQueue_${QID}`
 export const ANCILLARY_Q_NAME = `ancillaryQueue_${QID}`
 export const TARGETPNL_Q_NAME = `targetPnlQueue_${QID}`
-export const redisConnection = new IORedis(redisUrl)
+export const redisConnection = new IORedis(redisUrl,{maxRetriesPerRequest: null});
 const queueOptions = {
   connection: redisConnection
 }
