@@ -1,3 +1,5 @@
 {
-  "standard.enable": false
+  "standard.enable": false,
+  "deno.enable": false,
+  "deno.enablePaths": []
 }
