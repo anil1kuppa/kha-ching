@@ -60,7 +60,7 @@ export default withSession(async (req, res) => {
       
 
       // then store access token remotely for other services to use it
-      //storeAccessTokenRemotely(user.session.access_token)
+      storeAccessTokenRemotely(user.session.access_token!)
       storeAccessTokeninRedis(user.session.access_token!)
     }
 
