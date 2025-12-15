@@ -1,5 +1,5 @@
 /* eslint-disable jsx-a11y/accessible-emoji */
-import NotificationsActiveIcon from '@material-ui/icons/NotificationsActive'
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import React, { useEffect, useState } from 'react'
@@ -49,18 +49,18 @@ const Header = () => {
         <ul>
           <li>
             <Link href='/dashboard'>
-              <a>Dashboard</a>
+              Dashboard
             </Link>
           </li>
           <li>
             <Link href='/plan'>
-              <a>Trade Plan</a>
+              Trade Plan
             </Link>
           </li>
           {!user?.isLoggedIn && (
             <li>
               <Link href='/'>
-                <a>Login</a>
+                Login
               </Link>
             </li>
           )}
@@ -68,17 +68,15 @@ const Header = () => {
             <>
               <li>
                 <Link href='/profile'>
-                  <a>
-                    {user?.session?.avatar_url && (
-                      <img
-                        alt={user.session.user_shortname}
-                        src={user.session.avatar_url}
-                        width={20}
-                        height={20}
-                      />
-                    )}
-                    Profile
-                  </a>
+                  {user?.session?.avatar_url && (
+                    <img
+                      alt={user.session.user_shortname}
+                      src={user.session.avatar_url}
+                      width={20}
+                      height={20}
+                    />
+                  )}
+                  Profile
                 </Link>
               </li>
               <li>

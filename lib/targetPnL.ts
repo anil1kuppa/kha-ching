@@ -97,7 +97,7 @@ const targetPnL = async ({
     
   {
     dbData.trailingMaxLossPoints=dbData.trailingMaxProfitPoints!
-    dbData.trailingMaxProfitPoints=round(1.2*dbData.trailingMaxProfitPoints!)
+    dbData.trailingMaxProfitPoints=round(1.1*dbData.trailingMaxProfitPoints!)
     await putValuestoDb(initialJobData.id!,dbData);
     
     // try{

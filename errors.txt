@@ -1,0 +1,14 @@
+ WARN  deprecated babel-eslint@10.1.0: babel-eslint is now @babel/eslint-parser. This package will no longer receive updates.
+ WARN  deprecated eslint-config-standard-with-typescript@20.0.0: Please use eslint-config-love, instead.
+ WARN  deprecated next-iron-session@4.2.0: Nov 2021 update: The library was renamed to iron-session and fully rewritten in TypeScript, it includes lots of new features and fixes. Follow the migration guide here: https://github.com/vvo/iron-session/releases/tag/v6.0.0. Existing sessions will be kept when upgrading. Thanks for using iron-session :).
+ ⚠ See more info here: https://nextjs.org/docs/messages/invalid-next-config
+
+./pages/api/fyers_order.js
+2:10  Warning: 'delay' is defined but never used.  @typescript-eslint/no-unused-vars
+2:17  Warning: 'ms' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./lib/browserUtils.ts
+89:3  Warning: 'exitStrategy' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./lib/exit-strategies/autoSquareOff.ts
+8:24  Warning: 'COMPLETED_BY_TAG' is defined but never used.  @typescript-eslint/no-unused-vars

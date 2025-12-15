@@ -1,9 +1,9 @@
-import { Box, Link, List, ListItem } from '@material-ui/core'
-import AppBar from '@material-ui/core/AppBar'
-import Tab from '@material-ui/core/Tab'
-import Tabs from '@material-ui/core/Tabs'
-import Typography from '@material-ui/core/Typography'
-import Alert from '@material-ui/lab/Alert'
+import { Box, Link, List, ListItem } from '@mui/material'
+import AppBar from '@mui/material/AppBar'
+import Tab from '@mui/material/Tab'
+import Tabs from '@mui/material/Tabs'
+import Typography from '@mui/material/Typography'
+import Alert from '@mui/lab/Alert'
 // import axios from 'axios'
 import dayjs from 'dayjs'
 import { useRouter } from 'next/router'
@@ -132,7 +132,7 @@ const Dashboard = ({
         </Alert>
       ) : null}
 
-      <AppBar position='static' color='default'>
+      <AppBar position='static' color='inherit'>
         <Tabs
           value={value}
           onChange={handleChange}

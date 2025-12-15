@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import CircularProgress from '@material-ui/core/CircularProgress'
+import CircularProgress from '@mui/material/CircularProgress'
 
 function ActionButtonOrLoader ({ children }) {
   const [isLoading, setLoading] = useState(false)

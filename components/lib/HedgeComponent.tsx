@@ -6,7 +6,7 @@ import {
   FormGroup,
   Grid,
   TextField
-} from '@material-ui/core'
+} from '@mui/material'
 import { VOLATILITY_TYPE } from '../../lib/constants'
 
 const HedgeComponent = ({

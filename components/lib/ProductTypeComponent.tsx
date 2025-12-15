@@ -7,7 +7,7 @@ import {
   RadioGroup,
   Radio,
   Grid
-} from '@material-ui/core'
+} from '@mui/material'
 import { PRODUCT_TYPE } from '../../lib/constants'
 
 const ProductTypeComponent = ({ state, onChange }) => {

@@ -5,7 +5,7 @@ import {
   FormControlLabel,
   FormGroup,
   Grid
-} from '@material-ui/core'
+} from '@mui/material'
 import { ROLLBACK_KEY_MAP } from '../../lib/constants'
 import { ROLLBACK_TYPE } from '../../types/plans'
 

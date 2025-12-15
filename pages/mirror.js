@@ -1,5 +1,5 @@
 /* eslint-disable jsx-a11y/accessible-emoji */
-import { Button, Paper } from '@material-ui/core'
+import { Button, Paper } from '@mui/material'
 import axios from 'axios'
 import { omit } from 'lodash'
 import useSWR, { mutate } from 'swr'

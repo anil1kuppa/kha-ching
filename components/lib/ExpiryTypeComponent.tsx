@@ -7,7 +7,7 @@ import {
   RadioGroup,
   Radio,
   Grid
-} from '@material-ui/core'
+} from '@mui/material'
 import { EXPIRY_TYPE, EXPIRY_TYPE_HUMAN } from '../../lib/constants'
 
 const ExpiryTypeComponent = ({ state, onChange }) => {

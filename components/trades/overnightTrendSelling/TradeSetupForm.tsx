@@ -1,4 +1,3 @@
-import DateFnsUtils from '@date-io/date-fns'
 import {
   Button,
   Checkbox,
@@ -12,11 +11,10 @@ import {
   RadioGroup,
   TextField,
   Typography
-} from '@material-ui/core'
-import {
-  KeyboardTimePicker,
-  MuiPickersUtilsProvider
-} from '@material-ui/pickers'
+} from '@mui/material'
+import { TimePicker } from '@mui/x-date-pickers/TimePicker'
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns'
 import dayjs from 'dayjs'
 import React from 'react'
 
@@ -206,21 +204,17 @@ const TradeSetupForm = ({
           ) : null}
 
           <Grid item xs={12}>
-            <MuiPickersUtilsProvider utils={DateFnsUtils}>
-              <KeyboardTimePicker
-                margin='normal'
-                id='time-picker'
+            <LocalizationProvider dateAdapter={AdapterDateFns}>
+              <TimePicker
                 label='Schedule run'
                 value={isSchedulingDisabled ? null : state.runAt}
                 disabled={isSchedulingDisabled}
                 onChange={selectedDate => {
                   onChange({ runAt: ensureIST(selectedDate) })
                 }}
-                KeyboardButtonProps={{
-                  'aria-label': 'change time'
-                }}
+                renderInput={(params) => <TextField {...params} margin='normal' id='time-picker' />}
               />
-            </MuiPickersUtilsProvider>
+            </LocalizationProvider>
           </Grid>
 
           <Grid item xs={12}>
@@ -238,7 +232,7 @@ const TradeSetupForm = ({
             {!isRunnable ? (
               <Button
                 variant='contained'
-                color='default'
+                color='inherit'
                 type='button'
                 onClick={onCancel}
                 style={{ marginLeft: 8 }}

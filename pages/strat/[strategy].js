@@ -1,4 +1,4 @@
-import { Link } from '@material-ui/core'
+import { Link } from '@mui/material'
 import { useRouter } from 'next/router'
 
 import StratLayout from '../../components/StratLayout'

@@ -1,29 +1,16 @@
-import { Box, Button, Divider, Grid, Typography } from '@material-ui/core'
-import Chip from '@material-ui/core/Chip'
-import FormControl from '@material-ui/core/FormControl'
-import FormHelperText from '@material-ui/core/FormHelperText'
-import InputLabel from '@material-ui/core/InputLabel'
-import MenuItem from '@material-ui/core/MenuItem'
-import Select from '@material-ui/core/Select'
-import { makeStyles } from '@material-ui/core/styles'
-import ScheduleIcon from '@material-ui/icons/Schedule'
+import { Box, Button, Divider, Grid, Typography } from '@mui/material'
+import Chip from '@mui/material/Chip'
+import FormControl from '@mui/material/FormControl'
+import FormHelperText from '@mui/material/FormHelperText'
+import InputLabel from '@mui/material/InputLabel'
+import MenuItem from '@mui/material/MenuItem'
+import Select from '@mui/material/Select'
+import ScheduleIcon from '@mui/icons-material/Schedule'
 import axios from 'axios'
 import dayjs from 'dayjs'
 import React, { useEffect, useState } from 'react'
 
-const useStyles = makeStyles(theme => ({
-  formControl: {
-    margin: theme.spacing(1),
-    minWidth: 120
-  },
-  selectEmpty: {
-    marginTop: theme.spacing(2)
-  },
-  greyColor: { color: '#636363' }
-}))
-
 export default function BrokerOrders ({ orders, trades, dbOrders }) {
-  const classes = useStyles()
   const [tradeMapByOrderTag, setTradeMapByOrderTag] = useState({})
   const [allTags, setAllTags] = useState([])
 
@@ -100,7 +87,7 @@ export default function BrokerOrders ({ orders, trades, dbOrders }) {
                 <Typography variant='body2'>
                   {order.humanTradingSymbol || order.tradingsymbol}
                 </Typography>
-                <Typography variant='body2' className={classes.greyColor}>
+                <Typography variant='body2' sx={{ color: '#636363' }}>
                   {order.exchange}
                 </Typography>
               </Box>
@@ -143,7 +130,7 @@ export default function BrokerOrders ({ orders, trades, dbOrders }) {
                 </Box>
                 <Box>
                   <Box display='flex' justifyContent='space-between'>
-                    <Typography variant='body2' className={classes.greyColor}>
+                    <Typography variant='body2' sx={{ color: '#636363' }}>
                       {order.average_price
                         ? 'Avg.'
                         : order.trigger_price
@@ -157,7 +144,7 @@ export default function BrokerOrders ({ orders, trades, dbOrders }) {
                     </Typography>
                   </Box>
                   <Box display='flex' justifyContent='space-between'>
-                    <Typography variant='body2' className={classes.greyColor}>
+                    <Typography variant='body2' sx={{ color: '#636363' }}>
                       {order.product}
                     </Typography>
                     <Typography variant='body2'>{order.order_type}</Typography>
@@ -168,7 +155,7 @@ export default function BrokerOrders ({ orders, trades, dbOrders }) {
             {trades ? (
               <Box>
                 <Grid item xs={6}>
-                  <FormControl className={classes.formControl}>
+                  <FormControl sx={{ m: 1, minWidth: 120 }}>
                     <InputLabel id={`tag_${idx}`}>Broker Tag</InputLabel>
                     <Select
                       style={{ fontSize: '12px' }}

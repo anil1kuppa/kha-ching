@@ -1,5 +1,5 @@
-import { Box, Button, Grid, Link, Paper, Typography } from '@material-ui/core'
-import { DeleteForever, Stop } from '@material-ui/icons'
+import { Box, Button, Grid, Link, Paper, Typography } from '@mui/material'
+import { DeleteForever, Stop } from '@mui/icons-material'
 import axios from 'axios'
 import dayjs from 'dayjs'
 import router from 'next/router'
@@ -140,7 +140,7 @@ const WrapperComponent = props => {
                 {({ setLoading }) => (
                   <Button
                     variant='outlined'
-                    color='default'
+                    color='inherit'
                     type='button'
                     onClick={async () => {
                       setLoading(true)

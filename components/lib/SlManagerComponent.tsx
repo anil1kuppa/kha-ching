@@ -1,7 +1,7 @@
 import {
   FormControl,
   FormControlLabel, FormLabel, Grid, Radio, RadioGroup, TextField, Typography
-} from '@material-ui/core'
+} from '@mui/material'
 import {
   COMBINED_SL_EXIT_STRATEGY_LABEL,
   EXIT_STRATEGIES,
@@ -103,74 +103,24 @@ const SlManagerComponent = ({ state, onChange, exitStrategies }) => {
           </Grid>
         </>
       ) : null}
-      {state.exitStrategy === EXIT_STRATEGIES.MULTI_LEG_PREMIUM_THRESHOLD||
-        state.exitStrategy === EXIT_STRATEGIES.INDIVIDUAL_LEG_SLM_1X 
-         ? (
+      {(state.exitStrategy === EXIT_STRATEGIES.MULTI_LEG_PREMIUM_THRESHOLD ||
+        state.exitStrategy === EXIT_STRATEGIES.INDIVIDUAL_LEG_SLM_1X) ? (
         <>
-         <Grid item xs={12} style={{ marginBottom: '16px' }}>
-        <TextField
-          fullWidth
-          name='slmPercent'
-          value={state.slmPercent}
-          onChange={e => onChange({ slmPercent: +e.target.value || undefined })}
-          label={
-            state.exitStrategy === EXIT_STRATEGIES.MULTI_LEG_PREMIUM_THRESHOLD
-              ? 'Initial SL %'
-              : 'SL %'
-          }
-        />
-      </Grid>
-      </>
-        ):null}
-    
-{/* 
-      {state.exitStrategy !== EXIT_STRATEGIES.MULTI_LEG_PREMIUM_THRESHOLD ||
-      (state.exitStrategy === EXIT_STRATEGIES.MULTI_LEG_PREMIUM_THRESHOLD &&
-        state.combinedExitStrategy ===
-          COMBINED_SL_EXIT_STRATEGY.EXIT_LOSING) ? (
-        <Grid item xs={12}>
-          <FormControl component='fieldset'>
-            <Grid item>
-              <FormLabel component='legend'>SL Type</FormLabel>
-              <RadioGroup
-                aria-label='slOrderType'
-                name='slOrderType'
-                value={state.slOrderType}
-                onChange={e =>
-                  onChange({ slOrderType: e.target.value as SL_ORDER_TYPE })
-                }
-                row
-              >
-                {slOrderTypes.map(slOrderType => (
-                  <FormControlLabel
-                    key={slOrderType}
-                    value={slOrderType}
-                    control={<Radio size='small' />}
-                    label={
-                      <Typography variant='body2'>{slOrderType}</Typography>
-                    }
-                  />
-                ))}
-              </RadioGroup>
-            </Grid>
-            {state.slOrderType === SL_ORDER_TYPE.SLL ? (
-              <Grid item>
-                <TextField
-                  fullWidth
-                  name='slLimitPricePercent'
-                  value={state.slLimitPricePercent}
-                  onChange={e =>
-                    onChange({
-                      slLimitPricePercent: +e.target.value || undefined
-                    })
-                  }
-                  label='Limit Price %'
-                />
-              </Grid>
-            ) : null}
-          </FormControl>
-        </Grid>
-      ) : null} */}
+          <Grid item xs={12} style={{ marginBottom: '16px' }}>
+            <TextField
+              fullWidth
+              name='slmPercent'
+              value={state.slmPercent}
+              onChange={(e: any) => onChange({ slmPercent: +e.target.value || undefined })}
+              label={
+                state.exitStrategy === EXIT_STRATEGIES.MULTI_LEG_PREMIUM_THRESHOLD
+                  ? 'Initial SL %'
+                  : 'SL %'
+              }
+            />
+          </Grid>
+        </>
+      ) : null}
     </>
   )
 }

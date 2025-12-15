@@ -1,4 +1,4 @@
-import { Button, Grid, Paper } from '@material-ui/core'
+import { Button, Grid, Paper } from '@mui/material'
 import dayjs from 'dayjs'
 import React from 'react'
 import TimeAgo from 'react-timeago'
