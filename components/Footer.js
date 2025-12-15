@@ -1,5 +1,5 @@
-import { Divider, Link, Typography } from '@material-ui/core'
-import Box from '@material-ui/core/Box'
+import { Divider, Link, Typography } from '@mui/material'
+import Box from '@mui/material/Box'
 
 const Footer = () => (
   <div>

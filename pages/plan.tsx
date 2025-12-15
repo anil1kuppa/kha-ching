@@ -1,20 +1,19 @@
-import { Box, Container, Link, Paper } from '@material-ui/core'
-import Accordion from '@material-ui/core/Accordion'
-import AccordionDetails from '@material-ui/core/AccordionDetails'
-import AccordionSummary from '@material-ui/core/AccordionSummary'
-import Backdrop from '@material-ui/core/Backdrop'
-import Button from '@material-ui/core/Button'
-import Chip from '@material-ui/core/Chip'
-import Fade from '@material-ui/core/Fade'
-import FormControl from '@material-ui/core/FormControl'
-import Grid from '@material-ui/core/Grid'
-import InputLabel from '@material-ui/core/InputLabel'
-import MenuItem from '@material-ui/core/MenuItem'
-import Modal from '@material-ui/core/Modal'
-import Select from '@material-ui/core/Select'
-import { makeStyles } from '@material-ui/core/styles'
-import Typography from '@material-ui/core/Typography'
-import ExpandMoreIcon from '@material-ui/icons/ExpandMore'
+import { Box, Container, Link, Paper } from '@mui/material'
+import Accordion from '@mui/material/Accordion'
+import AccordionDetails from '@mui/material/AccordionDetails'
+import AccordionSummary from '@mui/material/AccordionSummary'
+import Backdrop from '@mui/material/Backdrop'
+import Button from '@mui/material/Button'
+import Chip from '@mui/material/Chip'
+import Fade from '@mui/material/Fade'
+import FormControl from '@mui/material/FormControl'
+import Grid from '@mui/material/Grid'
+import InputLabel from '@mui/material/InputLabel'
+import MenuItem from '@mui/material/MenuItem'
+import Modal from '@mui/material/Modal'
+import Select from '@mui/material/Select'
+import Typography from '@mui/material/Typography'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import axios from 'axios'
 import { omit } from 'lodash'
 import React, { useEffect, useState } from 'react'
@@ -38,51 +37,6 @@ import {
   DIRECTIONAL_OPTION_SELLING_CONFIG,
   OTS_CONFIG
 } from '../types/plans'
-
-const useStyles = makeStyles(theme => ({
-  root: {
-    width: '100%'
-  },
-  pillsContainer: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    marginBottom: '16px',
-    '& > *': {
-      margin: theme.spacing(0.5)
-    }
-  },
-  flexVertical: {
-    flexDirection: 'column'
-  },
-  heading: {
-    fontSize: theme.typography.pxToRem(15),
-    fontWeight: theme.typography.fontWeightRegular
-  },
-  formControl: {
-    margin: theme.spacing(1),
-    minWidth: 120
-  },
-  selectEmpty: {
-    marginTop: theme.spacing(2)
-  },
-  modal: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    overflow: 'scroll',
-    height: '100%',
-    display: 'block'
-  },
-  backdrop: {
-    background: 'rgba(0,0,0,0.75)'
-  },
-  paper: {
-    backgroundColor: theme.palette.background.paper,
-    border: '2px solid #000',
-    boxShadow: theme.shadows[5],
-    padding: theme.spacing(2, 4, 3)
-  }
-}))
 
 /**
  *
@@ -148,8 +102,6 @@ const Plan = () => {
   const [currentEditStrategy, setCurrentEditStrategy] = useState<STRATEGIES>()
 
   const [stratState, setStratState] = useState(resetDefaultStratState)
-
-  const classes = useStyles()
 
   const handleOpen = () => {
     setOpen(true)
@@ -397,17 +349,17 @@ const Plan = () => {
               aria-controls={`${dayOfWeek}-content`}
               id={`${dayOfWeek}-header`}
             >
-              <Typography className={classes.heading}>
+              <Typography sx={{ fontSize: '0.9375rem', fontWeight: 400 }}>
                 {dayProps.heading}
               </Typography>
             </AccordionSummary>
-            <AccordionDetails className={classes.flexVertical}>
+            <AccordionDetails sx={{ flexDirection: 'column' }}>
               {Object.keys(dayProps.strategies).length > 0 ? (
                 <>
                   <Typography component='p' variant='subtitle1'>
                     Saved trades — (click to edit, or cross to delete)
                   </Typography>
-                  <div className={classes.pillsContainer}>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', marginBottom: '16px', '& > *': { margin: '4px' } }}>
                     {Object.keys(dayProps.strategies)
                       .filter(
                         strategyKey =>
@@ -436,11 +388,11 @@ const Plan = () => {
                           />
                         )
                       })}
-                  </div>
+                  </Box>
                 </>
               ) : null}
               <Grid container alignItems='flex-start' spacing={2}>
-                <FormControl className={classes.formControl}>
+                <FormControl sx={{ m: 1, minWidth: 120 }}>
                   <InputLabel id={`${dayOfWeek}_label`}>
                     Select trade here
                   </InputLabel>
@@ -495,14 +447,14 @@ const Plan = () => {
         <Modal
           aria-labelledby='transition-modal-title'
           aria-describedby='transition-modal-description'
-          className={classes.modal}
+          sx={{ position: 'absolute', top: 0, left: 0, overflow: 'scroll', height: '100%', display: 'block' }}
           open={open}
           onClose={handleClose}
           closeAfterTransition
           BackdropComponent={Backdrop}
           BackdropProps={{
-            classes: {
-              root: classes.backdrop
+            sx: {
+              background: 'rgba(0,0,0,0.75)'
             },
             timeout: 500
           }}

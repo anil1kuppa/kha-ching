@@ -1,4 +1,4 @@
-import Chip from '@material-ui/core/Chip'
+import Chip from '@mui/material/Chip'
 import React from 'react'
 
 export default function PnLComponent ({ pnl }) {

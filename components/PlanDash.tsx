@@ -1,4 +1,4 @@
-import { Typography, Link, Button, Grid, Paper } from '@material-ui/core'
+import { Typography, Link, Button, Grid, Paper } from '@mui/material'
 
 import axios from 'axios'
 import dayjs from 'dayjs'

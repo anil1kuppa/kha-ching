@@ -16,8 +16,8 @@ import {
   Select,
   TextField,
   Typography
-} from '@material-ui/core'
-import Box from '@material-ui/core/Box'
+} from '@mui/material'
+import Box from '@mui/material/Box'
 import useSWR from 'swr'
 
 import { INSTRUMENT_DETAILS } from '../../../lib/constants'

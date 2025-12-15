@@ -1,3 +1,5 @@
 {
+  "deno.enable": false,
+  "deno.lint": false,
   "standard.enable": false
 }

@@ -1,13 +1,7 @@
 import React from 'react'
-import { makeStyles } from '@material-ui/core/styles'
-import Typography from '@material-ui/core/Typography'
-import Slider from '@material-ui/core/Slider'
-
-const useStyles = makeStyles({
-  root: {
-    width: 300
-  }
-})
+import { Box } from '@mui/material'
+import Typography from '@mui/material/Typography'
+import Slider from '@mui/material/Slider'
 
 export default function DiscreteSlider ({
   label,
@@ -17,11 +11,9 @@ export default function DiscreteSlider ({
   max,
   value,
   onChange
-}) {
-  const classes = useStyles()
-
+}: any) {
   return (
-    <div className={classes.root}>
+    <Box sx={{ width: 300 }}>
       <Typography gutterBottom>{label}</Typography>
       <Slider
         value={value}
@@ -33,6 +25,6 @@ export default function DiscreteSlider ({
         valueLabelDisplay='auto'
         onChange={onChange}
       />
-    </div>
+    </Box>
   )
 }
