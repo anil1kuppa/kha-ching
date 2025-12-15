@@ -447,20 +447,20 @@ const Plan = () => {
         <Modal
           aria-labelledby='transition-modal-title'
           aria-describedby='transition-modal-description'
-          sx={{ position: 'absolute', top: 0, left: 0, overflow: 'scroll', height: '100%', display: 'block' }}
+          sx={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', overflow: 'auto', pt: 4 }}
           open={open}
           onClose={handleClose}
           closeAfterTransition
           BackdropComponent={Backdrop}
           BackdropProps={{
             sx: {
-              background: 'rgba(0,0,0,0.75)'
+              background: 'rgba(0,0,0,0.5)'
             },
             timeout: 500
           }}
         >
-          <Container maxWidth='sm'>
-            <Fade in={open}>
+          <Fade in={open}>
+            <Container maxWidth='sm'>
               <Box>
                 <Typography variant='subtitle2'>
                   <Link
@@ -551,8 +551,8 @@ const Plan = () => {
                   />
                 ) : null}
               </Box>
-            </Fade>
-          </Container>
+            </Container>
+          </Fade>
         </Modal>
       ) : null}
     </Layout>
