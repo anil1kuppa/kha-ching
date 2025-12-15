@@ -58,8 +58,13 @@
     "winston-daily-rotate-file": "^4.6.1"
   },
   "devDependencies": {
+    "@babel/core": "^7.27.1",
+    "@next/eslint-plugin-next": "^15.3.2",
+    "@types/babel__core": "^7",
     "@types/bluebird": "^3.5.36",
-    "@types/react": "^17.0.16",
+    "@types/prop-types": "^15",
+    "@types/react": "17.0.0",
+    "@types/react-dom": "17.0.0",
     "@typescript-eslint/eslint-plugin": "4",
     "@typescript-eslint/parser": "^4.29.0",
     "axios-mock-adapter": "^1.19.0",
@@ -76,8 +81,8 @@
     "eslint-plugin-node": "11",
     "eslint-plugin-prettier": "^3.3.1",
     "eslint-plugin-promise": "4",
-    "eslint-plugin-react": "^7.24.0",
-    "eslint-plugin-react-hooks": "^4.2.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-simple-import-sort": "^7.0.0",
     "husky": "^5.0.9",
     "identity-obj-proxy": "^3.0.0",
@@ -85,9 +90,11 @@
     "jest-when": "^3.3.1",
     "lint-staged": "^10.5.4",
     "mockserver": "^3.1.1",
+    "prettier": "^3.5.3",
     "prettier-standard": "^16.4.1",
+    "prop-types": "^15.8.1",
     "react-test-renderer": "^17.0.2",
-    "typescript": "^4.9.4"
+    "typescript": "^5.8.3"
   },
   "husky": {
     "hooks": {

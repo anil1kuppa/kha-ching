@@ -58,6 +58,7 @@ export const SIGNALX_URL =
   process.env.SIGNALX_URL ?? 'https://indicator.signalx.trade'
 const KITE_API_KEY = process.env.KITE_API_KEY
 const ORCL_HOST_URL=process.env.ORCL_HOST_URL
+const SUPABASE_URL=process.env.SUPABASE_URL
 
 export const logDeep = object => console.log(JSON.stringify(object, null, 2))
 
@@ -735,13 +736,27 @@ const { access_token: dbAccessToken } = item
 
 export const storeAccessTokenRemotely = async accessToken => {
    try {
-   await axios.post(
-      `${ORCL_HOST_URL}/rest-v1/access_tokens`,
-      {
-        access_token: accessToken
+  //  await axios.post(
+  //     `${ORCL_HOST_URL}/rest-v1/access_tokens`,
+  //     {
+  //       access_token: accessToken
+  //     }
+  //   )
+  await axios.post(
+    `${SUPABASE_URL}/functions/v1/insertAccesstoken`,
+    {
+      access_token: accessToken
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.SUPABASE_API_KEY}`,
+        'Content-Type': 'application/json'
       }
-    )
-  } catch (e) {
+    }
+  );
+  console.log('✅ [storeAccessTokenRemotely] success');
+}
+   catch (e) {
     console.log('🔴 [storeAccessTokenRemotely] error', e)
   }
 }
