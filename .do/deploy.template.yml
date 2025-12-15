@@ -6,8 +6,8 @@ spec:
       repo: anil1kuppa/kha-ching
       branch: master
       deploy_on_push: false
-    build_command: yarn build
-    run_command: yarn start
+    build_command: pnpm install && pnpm build
+    run_command: pnpm start
     envs:
     - key: KITE_API_KEY
       value: "Your Kite API key"
