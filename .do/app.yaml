@@ -1,0 +1,13 @@
+name: kha-ching
+services:
+- name: kha-ching
+  github:
+    repo: anil1kuppa/kha-ching
+    branch: master
+  build_command: pnpm install && pnpm build
+  run_command: node ./bootup.js & TZ=Asia/Kolkata next start -H 0.0.0.0 -p ${PORT:-8080}
+  envs:
+  - key: NODE_ENV
+    value: production
+  http_port: 8080
+  source_dir: ./
