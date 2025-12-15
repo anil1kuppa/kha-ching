@@ -12,6 +12,15 @@ const theme = createMuiTheme({
     error: {
       main: '#e83d55'
     },
+    warning: {
+      main: '#ff9800'
+    },
+    info: {
+      main: '#2196f3'
+    },
+    success: {
+      main: '#4caf50'
+    },
     background: {
       default: '#fff'
     }
