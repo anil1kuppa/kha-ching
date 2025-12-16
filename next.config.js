@@ -1,9 +1,8 @@
-const withPWA = require('next-pwa')
-
-module.exports = withPWA({
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   images: {
     unoptimized: true
-  },
-  disable: process.env.NODE_ENV !== 'production',
-  dest: 'public'
-})
+  }
+}
+
+module.exports = nextConfig

@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "NODE_OPTIONS='--inspect --openssl-legacy-provider' next dev",
-    "build": "NODE_OPTIONS='--openssl-legacy-provider' next build",
+    "dev": "next dev",
+    "build": "next build",
     "start": "node ./bootup.js & TZ=Asia/Kolkata next start -H 0.0.0.0 -p ${PORT:-8080}",
     "lint": "next lint --quiet",
     "test": "jest ./__tests__ --testPathIgnorePatterns support/*",
@@ -47,11 +47,11 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-swipeable-views": "^0.14.0",
-    "react-timeago": "^5.2.0",
+    "react-timeago": "^7.2.0",
     "react-toastify": "^7.0.4",
     "redis": "^3.1.2",
     "redis-memoizer": "^1.0.2",
-    "swr": "^0.4.2",
+    "swr": "^2.2.0",
     "trace-unhandled": "^2.0.1",
     "uuid": "^8.3.2",
     "winston": "^3.7.2",
@@ -93,7 +93,7 @@
     "prettier": "^3.5.3",
     "prettier-standard": "^16.4.1",
     "prop-types": "^15.8.1",
-    "react-test-renderer": "^17.0.2",
+    "react-test-renderer": "^18.3.1",
     "typescript": "^5.8.3"
   },
   "husky": {

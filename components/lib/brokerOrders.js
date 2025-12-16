@@ -111,7 +111,7 @@ export default function BrokerOrders ({ orders, trades, dbOrders }) {
                     >
                       <ScheduleIcon
                         fontSize='small'
-                        color='disabled'
+                        sx={{ color: 'action.disabled' }}
                         style={{ marginRight: 2 }}
                       />
                       <Typography variant='body2'>
@@ -124,7 +124,7 @@ export default function BrokerOrders ({ orders, trades, dbOrders }) {
                     label={order.status}
                     disabled
                     color={
-                      order.status === 'COMPLETE' ? 'secondary' : 'disabled'
+                      order.status === 'COMPLETE' ? 'secondary' : 'default'
                     }
                   />
                 </Box>
