@@ -1,11 +1,8 @@
-const withPWA = require('next-pwa')
-
-module.exports = withPWA({
-  pwa: {
-    disable: true,
-    dest: 'public'
-  },
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   images: {
     unoptimized: true
   }
-})
+}
+
+module.exports = nextConfig

@@ -11,7 +11,7 @@ Once you've gone through the Notion doc above, come back here for instructions t
 
 1. [Sign up on DigitalOcean using this link](https://m.do.co/c/d9db955b428e). You'd receive $100 in new signup credits valid for 2 months. Running this app costs $10/month. So you'd be able to run it FREE for first 2 months.
 
-2) Goto https://kite.trade and sign up for Kite Connect. Create an app and pay Zerodha the ₹2000/month fee.
+2) Goto https://kite.trade and sign up for Kite Connect. Create an app and pay Zerodha the ₹500/month fee.
 
    - Ignore the `Redirect URL` and `Postback URL` fields for now.
    - Copy `API Key` and `API Secret` fields and keep them handy somewhere.
@@ -109,8 +109,8 @@ Leave the value in this field as it-is. This'll inform if there's an app update 
 In case you'd like to contribute, you can run the development server like so
 
 ```bash
-yarn
-yarn dev
+pnpm build
+pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.

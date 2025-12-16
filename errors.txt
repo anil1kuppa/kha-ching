@@ -12,3 +12,36 @@
 
 ./lib/exit-strategies/autoSquareOff.ts
 8:24  Warning: 'COMPLETED_BY_TAG' is defined but never used.  @typescript-eslint/no-unused-vars
+
+Dec 15 03:44:14 [kha-ching] [34m│[0m  WARN  Issues with peer dependencies found
+Dec 15 03:44:14 [kha-ching] [34m│[0m .
+Dec 15 03:44:14 [kha-ching] [34m│[0m ├─┬ react-test-renderer 17.0.2
+Dec 15 03:44:14 [kha-ching] [34m│[0m │ └── ✕ unmet peer react@17.0.2: found 18.3.1
+Dec 15 03:44:14 [kha-ching] [34m│[0m ├─┬ react-swipeable-views 0.14.1
+Dec 15 03:44:14 [kha-ching] [34m│[0m │ ├── ✕ unmet peer react@"^15.3.0 || ^16.0.0 || ^17.0.0": found 18.3.1
+Dec 15 03:44:14 [kha-ching] [34m│[0m │ ├─┬ react-swipeable-views-core 0.14.1
+Dec 15 03:44:14 [kha-ching] [34m│[0m │ │ └── ✕ unmet peer react@"^15.3.0 || ^16.0.0 || ^17.0.0": found 18.3.1
+Dec 15 03:44:14 [kha-ching] [34m│[0m │ └─┬ react-swipeable-views-utils 0.14.1
+Dec 15 03:44:14 [kha-ching] [34m│[0m │   ├── ✕ unmet peer react@"^15.3.0 || ^16.0.0 || ^17.0.0": found 18.3.1
+Dec 15 03:44:14 [kha-ching] [34m│[0m │   └─┬ react-event-listener 0.6.7
+Dec 15 03:44:14 [kha-ching] [34m│[0m │     └── ✕ unmet peer react@^16.3.0: found 18.3.1
+Dec 15 03:44:14 [kha-ching] [34m│[0m ├─┬ react-timeago 5.3.0
+Dec 15 03:44:14 [kha-ching] [34m│[0m │ └── ✕ unmet peer react@"^16.0.0 || ^17.0.0": found 18.3.1
+Dec 15 03:44:14 [kha-ching] [34m│[0m └─┬ swr 0.4.2
+Dec 15 03:44:14 [kha-ching] [34m│[0m   └── ✕ unmet peer react@"^16.11.0 || ^17.0.0": found 18.3.1
+
+Dec 15 03:50:50 [kha-ching] > kha-ching@0.1.0 start /workspace
+Dec 15 03:50:50 [kha-ching] > node ./bootup.js & TZ=Asia/Kolkata next start -H 0.0.0.0 -p ${PORT:-8080}
+Dec 15 03:50:50 [kha-ching] 
+Dec 15 03:50:53 [kha-ching]  ⚠ Invalid next.config.js options detected: 
+Dec 15 03:50:53 [kha-ching]  ⚠     Unrecognized key(s) in object: 'disable', 'dest'
+Dec 15 03:50:53 [kha-ching]  ⚠ See more info here: https://nextjs.org/docs/messages/invalid-next-config
+Dec 15 03:50:53 [kha-ching]   ▲ Next.js 13.5.11
+
+> [PWA] PWA support is disabled
+   Using external babel configuration from /Users/anil.kuppa/Personal/Projects/kha-ching/babel.config.js
+ ⚠ It looks like there is a custom Babel configuration can be removed .
+ ⨯ Failed to patch lockfile, please try uninstalling and reinstalling next in this workspace
+TypeError: Cannot read properties of undefined (reading 'os')
+    at fetchPkgInfo (/Users/anil.kuppa/Personal/Projects/kha-ching/node_modules/.pnpm/next@13.5.11_@babel+core@7.28.5_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/lib/patch-incorrect-lockfile.js:72:25)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)

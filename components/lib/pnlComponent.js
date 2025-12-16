@@ -5,7 +5,7 @@ export default function PnLComponent ({ pnl }) {
   return (
     <Chip
       label={`₹${pnl} ${pnl < 0 ? '🥵' : '🎉'}`}
-      color={pnl < 0 ? 'default' : 'secondary'}
+      color={pnl < 0 ? 'error' : 'success'}
       style={{ fontWeight: 'bold' }}
     />
   )
