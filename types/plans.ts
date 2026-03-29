@@ -92,7 +92,6 @@ export interface ATM_STRANGLE_CONFIG extends SavedPlanMeta {
   isHedgeEnabled: boolean
   hedgeDistance?: number
   distanceFromAtm: number
-  deltaStrikes?: number
   percentfromAtm?:number
   optionPrice?:number
   volatilityType: VOLATILITY_TYPE
@@ -118,7 +117,6 @@ export interface OTS_CONFIG extends SavedPlanMeta {
   isAutoSquareOffEnabled:boolean
   rollback?: ROLLBACK_TYPE
   distanceFromAtm: number
-  deltaStrikes?: number
   percentfromAtm?:number
   volatilityType: VOLATILITY_TYPE
   slOrderType: SL_ORDER_TYPE

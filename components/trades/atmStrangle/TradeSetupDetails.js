@@ -17,7 +17,6 @@ const Details = args => {
     inverted,
     entryStrategy,
     strategy,
-    deltaStrikes,
     percentfromAtm,
     distanceFromAtm,
     optionPrice
@@ -42,10 +41,8 @@ const Details = args => {
               ].label
           }
         ],
-        entryStrategy === STRANGLE_ENTRY_STRATEGIES.DELTA_STIKES
-          ? [{ value: 'Strikes delta' }, { value: deltaStrikes }]
-          : entryStrategy === STRANGLE_ENTRY_STRATEGIES.PERCENT_FROM_ATM?
-          [{ value: 'Percent from ATM' }, { value: percentfromAtm }]
+        entryStrategy === STRANGLE_ENTRY_STRATEGIES.PERCENT_FROM_ATM
+          ? [{ value: 'Percent from ATM' }, { value: percentfromAtm }]
           : entryStrategy === STRANGLE_ENTRY_STRATEGIES.ENTRY_PRICE?
           [{ value: 'Option Price' }, { value: optionPrice }]:
           [{ value: 'Distance from ATM' }, { value: distanceFromAtm }],
