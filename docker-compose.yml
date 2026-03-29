@@ -51,6 +51,22 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       REDIS_URL: redis://redis:6379
       TZ: Asia/Kolkata
+      # Kite API
+      KITE_API_KEY: ${KITE_API_KEY}
+      KITE_API_SECRET: ${KITE_API_SECRET}
+      URL: ${URL:-http://localhost:3000/api/redirect_url_kite}
+      ProductionURL: ${ProductionURL}
+      # SignalX API
+      SIGNALX_API_KEY: ${SIGNALX_API_KEY}
+      # Session
+      SECRET_COOKIE_PASSWORD: ${SECRET_COOKIE_PASSWORD}
+      # Defaults
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      NEXT_PUBLIC_DEFAULT_LOTS: ${NEXT_PUBLIC_DEFAULT_LOTS:-2}
+      NEXT_PUBLIC_DEFAULT_SKEW_PERCENT: ${NEXT_PUBLIC_DEFAULT_SKEW_PERCENT:-10}
+      NEXT_PUBLIC_DEFAULT_SQUARE_OFF_TIME: ${NEXT_PUBLIC_DEFAULT_SQUARE_OFF_TIME:-15:20}
+      NEXT_PUBLIC_DEFAULT_SLM_PERCENT: ${NEXT_PUBLIC_DEFAULT_SLM_PERCENT:-30}
+      MOCK_ORDERS: ${MOCK_ORDERS:-false}
     ports:
       - "${PORT:-3000}:3000"
     depends_on:

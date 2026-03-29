@@ -14,25 +14,38 @@ This project uses Docker and Docker Compose to run PostgreSQL, Redis, and the No
 Copy the example environment file and update it with your configuration:
 
 ```bash
-cp .env.example .env
+cp .env.example .env.local
 ```
 
-Edit `.env` and add your Kite API credentials and other configuration:
+Edit `.env.local` and add your Kite API credentials and other configuration:
 
 ```env
+# PostgreSQL
 DB_HOST=postgres
 DB_PORT=5432
 DB_NAME=trading_db
 DB_USER=postgres
 DB_PASSWORD=postgres
 
+# Redis
 REDIS_URL=redis://redis:6379
 
+# Kite API
 KITE_API_KEY=your_api_key
 KITE_API_SECRET=your_api_secret
-KITE_REDIRECT_URL=http://localhost:3000/api/redirect_url_kite
+URL=http://localhost:3000/api/redirect_url_kite
 
-SESSION_SECRET=your_session_secret_key_here_min_32_chars_recommended
+# SignalX API
+SIGNALX_API_KEY=your_signalx_api_key
+
+# Session Security
+SECRET_COOKIE_PASSWORD=your_secure_cookie_password_min_32_chars
+
+# Application defaults
+NEXT_PUBLIC_DEFAULT_LOTS=2
+NEXT_PUBLIC_DEFAULT_SKEW_PERCENT=10
+NEXT_PUBLIC_DEFAULT_SQUARE_OFF_TIME=15:20
+NEXT_PUBLIC_DEFAULT_SLM_PERCENT=30
 ```
 
 ### 2. Start the containers
@@ -110,26 +123,51 @@ docker-compose exec postgres psql -U postgres -d trading_db -f /path/to/migratio
 
 ## Using dbUtils.ts
 
-The `lib/dbUtils.ts` module provides a simple interface to interact with PostgreSQL:
+The `lib/dbUtils.ts` module provides a simple interface to interact with PostgreSQL directly (no HTTP, direct TCP connection):
 
 ```typescript
-import { query, queryOne, insertOne, updateRows, deleteRows } from '@/lib/dbUtils'
+import { query, queryOne, queryAll, insertOne, updateRows, deleteRows } from '@/lib/dbUtils'
 
-// Query
-const users = await queryAll('SELECT * FROM users')
+// Query with parameters
+const users = await queryAll('SELECT * FROM users WHERE status = $1', ['active'])
 
 // Query one
 const user = await queryOne('SELECT * FROM users WHERE id = $1', [userId])
 
 // Insert
-const newUser = await insertOne('users', { name: 'John', email: 'john@example.com' })
+const newUser = await insertOne('users', {
+  name: 'John',
+  email: 'john@example.com',
+  status: 'active'
+})
 
 // Update
-const updated = await updateRows('users', { name: 'Jane' }, 'id = $1', [userId])
+const updated = await updateRows('users',
+  { name: 'Jane' },
+  'id = $1',
+  [userId]
+)
 
 // Delete
 const deleted = await deleteRows('users', 'id = $1', [userId])
 ```
+
+## Environment Variables
+
+The application uses PostgreSQL directly (no Supabase HTTP API). See `.env.example` for all available variables.
+
+### Key Variables:
+- `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` — PostgreSQL connection
+- `REDIS_URL` — Redis connection (for BullMQ queue processing)
+- `KITE_API_KEY`, `KITE_API_SECRET` — Kite broker API credentials
+- `SIGNALX_API_KEY` — SignalX API key
+- `SECRET_COOKIE_PASSWORD` — Session cookie encryption (min 32 chars)
+- `NEXT_PUBLIC_*` — Client-side configuration variables
+
+### Removed Variables:
+- ~~`ORCL_HOST_URL`~~ — Oracle database no longer used
+- ~~`SUPABASE_SERVICE_ROLE_KEY`~~ — Supabase no longer used, using PostgreSQL directly
+- ~~`DATABASE_HOST_URL`, `DATABASE_API_KEY`~~ — Replaced by local PostgreSQL
 
 ## Troubleshooting
 
