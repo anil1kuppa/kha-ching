@@ -15,11 +15,7 @@ test('it should fetch strikes by delta', async () => {
       instrument: 'NIFTY',
       contract: '18AUG2021'
     },
-    {
-      headers: {
-        'X-API-KEY': process.env.SIGNALX_API_KEY
-      }
-    }
+    {}
   )
   const strikes = getStrikeByDelta(15, data)
   console.log(strikes)

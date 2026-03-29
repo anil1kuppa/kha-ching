@@ -4,9 +4,6 @@ import { useRouter } from 'next/router'
 import StratLayout from '../../components/StratLayout'
 import AtmStraddleSetup from '../../components/trades/atmStraddle'
 import AtmStrangleSetup from '../../components/trades/atmStrangle'
-import OTSSetup from '../../components/trades/overnightTrendSelling'
-import DirectionalOptionSellingTradeSetup from '../../components/trades/directionalOptionSelling'
-import OptionBuyingStrategyTradeSetup from '../../components/trades/optionBuyingStrategy'
 import { EXIT_STRATEGIES, INSTRUMENTS } from '../../lib/constants'
 
 const Strategy = () => {
@@ -37,33 +34,6 @@ const Strategy = () => {
           <AtmStrangleSetup
             enabledInstruments={[INSTRUMENTS.NIFTY, INSTRUMENTS.BANKNIFTY]}
             exitStrategies={[EXIT_STRATEGIES.NO_SL]}
-          />
-        </StratLayout>
-      )
-    }
-    case 'ots': {
-      return (
-        <StratLayout>
-          <OTSSetup
-            enabledInstruments={[INSTRUMENTS.NIFTY, INSTRUMENTS.BANKNIFTY]}
-            exitStrategies={[EXIT_STRATEGIES.NO_SL]}
-          />
-        </StratLayout>
-      )
-    }
-    case 'dos': {
-      return (
-        <StratLayout>
-          <DirectionalOptionSellingTradeSetup />
-        </StratLayout>
-      )
-    }
-    case 'obs': {
-      return (
-        <StratLayout>
-          <OptionBuyingStrategyTradeSetup
-            enabledInstruments={[INSTRUMENTS.BANKNIFTY]}
-            exitStrategies={[EXIT_STRATEGIES.OBS_TRAIL_SL]}
           />
         </StratLayout>
       )

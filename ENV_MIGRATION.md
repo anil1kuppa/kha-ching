@@ -47,7 +47,6 @@ DB_PASSWORD=postgres      # PostgreSQL password
 | `NEXT_PUBLIC_DEFAULT_SKEW_PERCENT` | Public | Default skew percentage | 10 |
 | `NEXT_PUBLIC_DEFAULT_SQUARE_OFF_TIME` | Public | Default square-off time | 15:20 |
 | `NEXT_PUBLIC_DEFAULT_SLM_PERCENT` | Public | Default SLM percentage | 30 |
-| `SIGNALX_API_KEY` | Private | SignalX API key | — |
 | `MOCK_ORDERS` | Public | Enable mock orders in dev | true |
 
 ## Migration Steps
@@ -68,7 +67,6 @@ DB_PASSWORD=postgres      # PostgreSQL password
    KITE_API_KEY=77ci27w4end21li3
    KITE_API_SECRET=atjmkwlx0vhkwyo3bxhy8hfgh69b8ep7
    SECRET_COOKIE_PASSWORD=6QZEEr1ZZZznkj84Uv81ZMjH5U5b5wpR
-   SIGNALX_API_KEY=pAAzn2uLgfPuApGA
    ```
 
 4. **Set database credentials**
@@ -126,7 +124,6 @@ await updateRows('trades', { status: 'completed' }, 'id = $1', [tradeId])
 
 - [ ] Copy `.env.example` to `.env.local`
 - [ ] Update `KITE_API_KEY` and `KITE_API_SECRET`
-- [ ] Update `SIGNALX_API_KEY`
 - [ ] Update `SECRET_COOKIE_PASSWORD`
 - [ ] Verify `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`
 - [ ] Verify `REDIS_URL`

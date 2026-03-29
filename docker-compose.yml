@@ -56,8 +56,6 @@ services:
       KITE_API_SECRET: ${KITE_API_SECRET}
       URL: ${URL:-http://localhost:3000/api/redirect_url_kite}
       ProductionURL: ${ProductionURL}
-      # SignalX API
-      SIGNALX_API_KEY: ${SIGNALX_API_KEY}
       # Session
       SECRET_COOKIE_PASSWORD: ${SECRET_COOKIE_PASSWORD}
       # Defaults

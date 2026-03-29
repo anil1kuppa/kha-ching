@@ -54,8 +54,6 @@ export interface GET_LTP_RESPONSE extends GET_LTP_ARGS {
 const MOCK_ORDERS = process.env.MOCK_ORDERS
   ? JSON.parse(process.env.MOCK_ORDERS)
   : false
-export const SIGNALX_URL =
-  process.env.SIGNALX_URL ?? 'https://indicator.signalx.trade'
 const KITE_API_KEY = process.env.KITE_API_KEY
 const ORCL_HOST_URL=process.env.ORCL_HOST_URL
 const SUPABASE_URL=process.env.SUPABASE_URL
@@ -1111,22 +1109,6 @@ export function withoutFwdSlash (url: string): string {
     return url.slice(0, url.length - 1)
   }
   return url
-}
-
-export async function premiumAuthCheck (): Promise<any> {
-  if (!process.env.SIGNALX_API_KEY) {
-    return false
-  }
-
-  return axios.post(
-    `${SIGNALX_URL}/api/auth`,
-    {},
-    {
-      headers: {
-        'X-API-KEY': process.env.SIGNALX_API_KEY
-      }
-    }
-  )
 }
 
 export const orclsodaUrl = `${ORCL_HOST_URL}/soda/latest`

@@ -1,16 +1,9 @@
 import { Worker } from 'bullmq'
 import { KiteOrder } from '../../types/kite'
-import {
-  DIRECTIONAL_OPTION_SELLING_TRADE,
-  SUPPORTED_TRADE_CONFIG
-} from '../../types/trade'
+import { SUPPORTED_TRADE_CONFIG } from '../../types/trade'
 
 import { EXIT_STRATEGIES } from '../constants'
-// import fyersTrailObsSL from '../exit-strategies/fyersTrailObsSL'
 import individualLegExitOrders from '../exit-strategies/individualLegExitOrders'
-import minXPercentOrSupertrend, {
-  DOS_TRAILING_INTERFACE
-} from '../exit-strategies/minXPercentOrSupertrend'
 import multiLegPremiumThreshold, {
   CombinedPremiumJobDataInterface
 } from '../exit-strategies/multiLegPremiumThreshold'
@@ -40,12 +33,6 @@ function processJob (jobData: {
         initialJobData: initialJobData as CombinedPremiumJobDataInterface,
         ...jobResponse
       })
-    }
-    case EXIT_STRATEGIES.MIN_XPERCENT_OR_SUPERTREND: {
-      return minXPercentOrSupertrend({
-        initialJobData: initialJobData as DIRECTIONAL_OPTION_SELLING_TRADE,
-        ...jobResponse
-      } as DOS_TRAILING_INTERFACE)
     }
     // case EXIT_STRATEGIES.OBS_TRAIL_SL: {
     //   return fyersTrailObsSL({

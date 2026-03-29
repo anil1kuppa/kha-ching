@@ -7,9 +7,6 @@ import { addToAutoSquareOffQueue,
   addToNextQueue, redisConnection, TARGETPNL_Q_NAME, TRADING_Q_NAME
 } from '../queue'
 import atmStraddle from '../strategies/atmStraddle'
-import directionalOptionSelling from '../strategies/directionalOptionSelling'
-import optionBuyingStrategy from '../strategies/optionBuyingStrategy'
-import overnightTrend from '../strategies/overnightTrend'
 import strangle from '../strategies/strangle'
 import { getCustomBackoffStrategies, logDeep, ms } from '../utils'
 
@@ -25,15 +22,6 @@ async function processJob (job: Job) {
     }
     case STRATEGIES.ATM_STRANGLE: {
       return strangle(data)
-    }
-    case STRATEGIES.DIRECTIONAL_OPTION_SELLING: {
-      return directionalOptionSelling(data)
-    }
-    case STRATEGIES.OPTION_BUYING_STRATEGY: {
-      return optionBuyingStrategy(data)
-    }
-    case STRATEGIES.OVERNIGHT_TREND_STATEGY: {
-      return overnightTrend(data)
     }
     default: {
       return null

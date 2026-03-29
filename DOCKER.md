@@ -160,7 +160,6 @@ The application uses PostgreSQL directly (no Supabase HTTP API). See `.env.examp
 - `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` — PostgreSQL connection
 - `REDIS_URL` — Redis connection (for BullMQ queue processing)
 - `KITE_API_KEY`, `KITE_API_SECRET` — Kite broker API credentials
-- `SIGNALX_API_KEY` — SignalX API key
 - `SECRET_COOKIE_PASSWORD` — Session cookie encryption (min 32 chars)
 - `NEXT_PUBLIC_*` — Client-side configuration variables
 
