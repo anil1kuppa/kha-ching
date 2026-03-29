@@ -1,9 +1,9 @@
-import axios from 'axios'
 import dayjs from 'dayjs'
 import { pick } from 'lodash'
 import { customAlphabet } from 'nanoid'
 
 import { tradingQueue, addToNextQueue, TRADING_Q_NAME } from '../../lib/queue'
+import { queryOne, insertOne, updateRows, deleteRows, queryAll } from '../../lib/dbUtils'
 
 import { ERROR_STRINGS, STRATEGIES_DETAILS } from '../../lib/constants'
 import console from '../../lib/logging'
@@ -12,7 +12,6 @@ import withSession from '../../lib/session'
 import {
   isMarketOpen,
   isMockOrder,
-  orclsodaUrl,
   logDeep
 } from '../../lib/utils'
 import { SUPPORTED_TRADE_CONFIG } from '../../types/trade'
@@ -70,133 +69,126 @@ async function deleteJob (id) {
 
 export default withSession(async (req, res) => {
   const user = req.session.get('user')
-  const dayparam=dayjs().format('YYYYMMDD') 
 
   if (!user) {
     return res.status(401).end()
   }
 
-  const orclEndpoint=`${orclsodaUrl}/dailyplan`
-  //const orclGetPoint=`${orclsodaUrl}/custom-actions/query/dailyplan`
-  /*ANILTODO: 1. Check if that collections exist
-  2. If it exists, keep posting , else crete a collection
-  */
-
   if (req.method === 'POST') {
-    let data: SUPPORTED_TRADE_CONFIG
+    let executionData: any
     const orderTag = nanoid()
     try {
-      logDeep(req.body);
-      //Check if collection is already created
-      // for every new job, first create a db entry
+      logDeep(req.body)
+      // Create job execution entry from the trade plan
       const postData = {
         ...req.body,
-        orderTag,
-        dayparam
+        order_tag: orderTag,
+        status: 'PENDING',
+        created_at: new Date()
       }
-      const  {data:{items:[{id,lastModified,created}]}}=await axios.post(`${orclEndpoint}`,postData);
-      const {data:getData} = await axios.get(`${orclEndpoint}/${id}`)
-      data={...getData,id,lastModified,created}
-      console.log(`[trades_Day] ${id} posted in daily_trades`)
+
+      const result = await insertOne('job_executions', postData)
+      if (!result) {
+        throw new Error('Failed to insert job execution')
+      }
+      executionData = result
+      console.log(`[trades_day] ${executionData.id} created in job_executions`)
     } catch (e) {
       console.log('🔴 failed to post', e)
-      return res
-        .status(e?.response?.status || 500)
-        .json(e?.response?.data || {})
+      return res.status(500).json({ error: e?.message })
     }
 
     try {
-      // then create the queue entry
+      // Create the queue entry
       const qRes = await createJob({
-        jobData: data,
+        jobData: { ...executionData, orderTag },
         user
       })
 
-      await axios.put(
-        `${orclEndpoint}/${data.id!}`,
+      // Update with queue info and status
+      const queueInfo = pick(qRes, [
+        'id',
+        'name',
+        'opts',
+        'timestamp',
+        'stacktrace',
+        'returnvalue'
+      ])
+
+      await updateRows(
+        'job_executions',
         {
-          ...data,
           status: 'QUEUE',
-          queue: pick(qRes, [
-            'id',
-            'name',
-            'opts',
-            'timestamp',
-            'stacktrace',
-            'returnvalue'
-          ])
-        }
-      )
-      // done!
-      return res.json(data)
-    } catch (e) {
-      console.log('🔴 job creation failed', e)
-      await axios.put(
-        `${orclEndpoint}/${data.id!}`,
-        {
-          ...data,
-          status: 'REJECT',
-          status_message: e?.message
-        }
+          queue: JSON.stringify(queueInfo)
+        },
+        'id = $1',
+        [executionData.id]
       )
 
-      return res.json(data)
+      return res.json(executionData)
+    } catch (e) {
+      console.log('🔴 job creation failed', e)
+      await updateRows(
+        'job_executions',
+        {
+          status: 'REJECT',
+          queue: JSON.stringify({ error: e?.message })
+        },
+        'id = $1',
+        [executionData.id]
+      )
+
+      return res.json(executionData)
     }
   }
 
   if (req.method === 'DELETE') {
     try {
-      const { data } = await axios(`${orclEndpoint}/${req.body.id as string}`)
-      if (data.queue?.id) {
-        await deleteJob(data.queue.id)
-      }
-      
-      await axios.delete(
-        `${orclEndpoint}/${req.body.id as string}`
+      const jobId = req.body.id as string
+      const execution = await queryOne(
+        'SELECT queue FROM job_executions WHERE id = $1',
+        [jobId]
       )
+
+      if (execution?.queue) {
+        const queueInfo = typeof execution.queue === 'string'
+          ? JSON.parse(execution.queue)
+          : execution.queue
+        if (queueInfo?.id) {
+          await deleteJob(queueInfo.id)
+        }
+      }
+
+      await deleteRows('job_executions', 'id = $1', [jobId])
       return res.end()
     } catch (e) {
       console.log('🔴 failed to delete', e)
-      return res
-        .status(e?.response?.status || 500)
-        .json(e?.response?.data || {})
+      return res.status(500).json({ error: e?.message })
     }
   }
 
   if (req.method === 'PUT') {
     try {
       const { id, ...props } = req.body
-      const { data } = await axios(`${orclEndpoint}/${id as string}`)
-      await axios.put(
-        `${orclEndpoint}/${id as string}`,
-        {
-          ...data,
-          ...props
-        }
-      )
+      await updateRows('job_executions', props, 'id = $1', [id])
       return res.end()
     } catch (e) {
       console.log('🔴 failed to put', e)
-      return res
-        .status(e?.response?.status || 500)
-        .json(e?.response?.data || {})
+      return res.status(500).json({ error: e?.message })
     }
   }
 
   if (req.method === 'GET') {
     try {
-      const {data:{items}}= await axios(
-        `${orclEndpoint}?q={"dayparam":"${dayparam}"}`);
-    
-    const data=items.map(items=>{
-      return ({...items.value,id:items.id})
-     });
-      return res.json(data)
+      const today = dayjs().format('YYYY-MM-DD')
+      const results = await queryAll(
+        'SELECT * FROM job_executions WHERE DATE(created_at) >= $1 ORDER BY created_at DESC',
+        [today]
+      )
+      return res.json(results)
     } catch (e) {
       console.log('🔴 failed to get', e)
-      return res
-        .status(e?.response?.status || 500)
-        .json(e?.response?.data || {})
+      return res.status(500).json({ error: e?.message })
     }
   }
 

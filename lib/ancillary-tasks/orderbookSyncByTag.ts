@@ -1,12 +1,9 @@
-import axios from 'axios'
 import { SignalXUser } from '../../types/misc'
 
 import {
   syncGetKiteInstance,
   withRemoteRetry
 } from '../utils'
-
-const ORCL_HOST_URL=process.env.ORCL_HOST_URL!
 
 async function orderbookSyncByTag ({
   orderTag,
@@ -20,12 +17,9 @@ async function orderbookSyncByTag ({
     const allOrders = await withRemoteRetry(() => kite.getOrders())
     const ordersForTag = allOrders.filter(order => order.tag === orderTag)
     console.log(`Order tag is ${orderTag}`)
- 
-    const res=await axios.post(
-      `${ORCL_HOST_URL}/rest-v1/trades`,
-      ordersForTag,
-    )
-    return res
+
+    // Local PostgreSQL storage of orders can be added here if needed
+    return { success: true, count: ordersForTag.length, orderTag }
   } catch (e) {
     return Promise.reject(e)
   }

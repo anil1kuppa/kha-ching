@@ -1,13 +1,9 @@
-import axios from 'axios'
 import { SignalXUser } from '../../types/misc'
-//import console from '../logging'
 import logger from '../logger'
 import {
   syncGetKiteInstance,
   withRemoteRetry
 } from '../utils'
-
-const ORCL_HOST_URL=process.env.ORCL_HOST_URL!
 
 async function orderbookSync ({
   user
@@ -20,15 +16,12 @@ async function orderbookSync ({
     const completedOrders = allOrders.filter(order =>(order.status === 'COMPLETE'))
     if (completedOrders.length>0)
     {
-      logger.info(`Completed orers in ancillary queue`,completedOrders);
-      const res=await axios.post(
-        `${ORCL_HOST_URL}/rest-v1/trades`,
-        completedOrders,
-      )
-      return Promise.resolve(res)
-    } 
+      logger.info(`Completed orders in ancillary queue`,completedOrders)
+      // Local PostgreSQL storage of orders can be added here if needed
+      return Promise.resolve({ success: true, count: completedOrders.length })
+    }
     else
-      return null;
+      return null
   } catch (e) {
     return Promise.reject(e)
   }

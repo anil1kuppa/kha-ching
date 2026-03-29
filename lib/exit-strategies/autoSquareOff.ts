@@ -1,5 +1,4 @@
 import { KiteOrder } from '../../types/kite'
-import axios from 'axios'
 import {
   ATM_STRADDLE_TRADE,
   ATM_STRANGLE_TRADE,
@@ -14,8 +13,7 @@ import {
   syncGetKiteInstance,
   withRemoteRetry,getCompletedOrdersbyTag
 } from '../utils'
-
-const ORCL_HOST_URL=process.env.ORCL_HOST_URL
+import { queryOne } from '../dbUtils'
 
 export async function doDeletePendingOrders (orders: KiteOrder[], kite: any) {
   const allOrders: KiteOrder[] = await withRemoteRetry(() => kite.getOrders())
@@ -176,9 +174,11 @@ export async function squareOffTag(orderTag:string,kite:any)
   3. Square off the orders
   */
    console.log(`[autoSquareOff] squareOfforders ${orderTag} `)
-  const endpoint = `${ORCL_HOST_URL}/soda/latest/dailyplan/?q={"orderTag":"${orderTag}"}`
-  const {data:{items:[{value:{user_override}}]}}=await axios(endpoint);
-  if (user_override===USER_OVERRIDE.ABORT)
+  const execution = await queryOne(
+    'SELECT user_override FROM job_executions WHERE order_tag = $1',
+    [orderTag]
+  )
+  if (execution?.user_override===USER_OVERRIDE.ABORT)
   {
     console.log('Not squaring off as user aborted');
     Promise.resolve('Not suqaring off');
@@ -246,9 +246,11 @@ async function autoSquareOffStrat ({
   const { user } = initialJobData
   const kite = syncGetKiteInstance(user)
   const completedOrders = rawKiteOrdersResponse
-  const endpoint = `${ORCL_HOST_URL}/soda/latest/dailyplan/${initialJobData.id}`
-  const {data}=await axios(endpoint);
-  const {user_override}=data
+  const execution = await queryOne(
+    'SELECT user_override FROM job_executions WHERE id = $1',
+    [initialJobData.id]
+  )
+  const user_override=execution?.user_override
   if (user_override===USER_OVERRIDE.ABORT)
   {
     console.log('Not squaring off as user aborted');
