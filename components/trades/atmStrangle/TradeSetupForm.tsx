@@ -65,7 +65,6 @@ const TradeSetupForm = ({
   ]
   const entryStrategies = [
     STRANGLE_ENTRY_STRATEGIES.DISTANCE_FROM_ATM,
-    STRANGLE_ENTRY_STRATEGIES.DELTA_STIKES,
     STRANGLE_ENTRY_STRATEGIES.PERCENT_FROM_ATM,
     STRANGLE_ENTRY_STRATEGIES.ENTRY_PRICE
   ]
@@ -181,19 +180,7 @@ const TradeSetupForm = ({
                   onChange({ distanceFromAtm: newValue })
                 }
               />
-            ) : state.entryStrategy ===
-            STRANGLE_ENTRY_STRATEGIES.DELTA_STIKES ?
-             (
-              <TextField
-                fullWidth
-                name='deltaStrikes'
-                value={state.deltaStrikes}
-                onChange={e =>
-                  onChange({ deltaStrikes: +e.target.value || undefined })
-                }
-                label='Strike delta'
-              />
-            ):state.entryStrategy ===
+            ) :state.entryStrategy ===
             STRANGLE_ENTRY_STRATEGIES.PERCENT_FROM_ATM?
             ( <TextField
               fullWidth

@@ -62,7 +62,7 @@ export async function queryAll<T = any>(
 export async function insertOne<T = any>(
   table: string,
   data: Record<string, any>,
-  returning: string = '*'
+  returning = '*'
 ): Promise<T | null> {
   const keys = Object.keys(data)
   const values = Object.values(data)
@@ -86,7 +86,7 @@ export async function updateRows<T = any>(
   data: Record<string, any>,
   whereClause: string,
   params?: any[],
-  returning: string = '*'
+  returning = '*'
 ): Promise<T[]> {
   const keys = Object.keys(data)
   const values = Object.values(data)
@@ -113,7 +113,7 @@ export async function deleteRows<T = any>(
   table: string,
   whereClause: string,
   params?: any[],
-  returning: string = '*'
+  returning = '*'
 ): Promise<T[]> {
   const sql = `
     DELETE FROM ${table}
@@ -139,7 +139,7 @@ export function getPool(): Pool {
   return pool
 }
 
-export default {
+const dbUtils = {
   query,
   queryOne,
   queryAll,
@@ -149,3 +149,5 @@ export default {
   closePool,
   getPool,
 }
+
+export default dbUtils

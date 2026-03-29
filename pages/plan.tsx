@@ -20,8 +20,6 @@ import React, { useEffect, useState } from 'react'
 import Layout from '../components/Layout'
 import ATMStraddleTradeForm from '../components/trades/atmStraddle/TradeSetupForm'
 import ATMStrangleTradeForm from '../components/trades/atmStrangle/TradeSetupForm'
-import DOSTradeForm from '../components/trades/directionalOptionSelling/TradeSetupForm'
-import OTSTradeForm from '../components/trades/overnightTrendSelling/TradeSetupForm'
 import { getSchedulingStateProps } from '../lib/browserUtils'
 import {
   INSTRUMENTS,
@@ -33,9 +31,7 @@ import { DailyPlansConfig, DailyPlansDayKey } from '../types/misc'
 import {
   ATM_STRADDLE_CONFIG,
   ATM_STRANGLE_CONFIG,
-  AvailablePlansConfig,
-  DIRECTIONAL_OPTION_SELLING_CONFIG,
-  OTS_CONFIG
+  AvailablePlansConfig
 } from '../types/plans'
 
 /**
@@ -59,13 +55,7 @@ const getDefaultState = (strategy: STRATEGIES): AvailablePlansConfig =>
 const resetDefaultStratState = (): Record<STRATEGIES, AvailablePlansConfig> => {
   return {
     [STRATEGIES.ATM_STRADDLE]: getDefaultState(STRATEGIES.ATM_STRADDLE),
-    [STRATEGIES.ATM_STRANGLE]: getDefaultState(STRATEGIES.ATM_STRANGLE),
-    [STRATEGIES.DIRECTIONAL_OPTION_SELLING]: getDefaultState(
-      STRATEGIES.DIRECTIONAL_OPTION_SELLING
-    ),
-    [STRATEGIES.OVERNIGHT_TREND_STATEGY]: getDefaultState(
-      STRATEGIES.OVERNIGHT_TREND_STATEGY
-    )
+    [STRATEGIES.ATM_STRANGLE]: getDefaultState(STRATEGIES.ATM_STRANGLE)
   } as Record<STRATEGIES, AvailablePlansConfig>
 }
 
@@ -410,9 +400,7 @@ const Plan = () => {
                   >
                     {[
                       STRATEGIES.ATM_STRADDLE,
-                      STRATEGIES.ATM_STRANGLE,
-                      STRATEGIES.DIRECTIONAL_OPTION_SELLING,
-                      STRATEGIES.OVERNIGHT_TREND_STATEGY
+                      STRATEGIES.ATM_STRANGLE
                     ].map(strategyKey => (
                       <MenuItem
                         value={strategyKey}
@@ -470,28 +458,7 @@ const Plan = () => {
                     &lt; cancel and go back
                   </Link>
                 </Typography>
-                {currentEditStrategy ===
-                STRATEGIES.DIRECTIONAL_OPTION_SELLING ? (
-                  <DOSTradeForm
-                    formHeading={`Editing ${
-                      STRATEGIES_DETAILS[currentEditStrategy].heading
-                    } for ${dayState[currentEditDay!].heading}`}
-                    state={
-                      stratState[
-                        STRATEGIES.DIRECTIONAL_OPTION_SELLING
-                      ] as DIRECTIONAL_OPTION_SELLING_CONFIG
-                    }
-                    onChange={changedProps =>
-                      stratOnChangeHandler(
-                        changedProps,
-                        STRATEGIES.DIRECTIONAL_OPTION_SELLING
-                      )
-                    }
-                    onSubmit={commonOnSubmitHandler as any}
-                    onCancel={commonOnCancelHandler}
-                    isRunnable={false}
-                  />
-                ) : currentEditStrategy === STRATEGIES.ATM_STRADDLE ? (
+                {currentEditStrategy === STRATEGIES.ATM_STRADDLE ? (
                   <ATMStraddleTradeForm
                     formHeading={`Editing ${
                       STRATEGIES_DETAILS[currentEditStrategy].heading
@@ -528,26 +495,6 @@ const Plan = () => {
                     onCancel={commonOnCancelHandler}
                     isRunnable={false}
                     strategy={STRATEGIES.ATM_STRANGLE}
-                  />
-                )
-                :currentEditStrategy === STRATEGIES.OVERNIGHT_TREND_STATEGY ? (
-                  <OTSTradeForm
-                    formHeading={`Editing ${
-                      STRATEGIES_DETAILS[currentEditStrategy].heading
-                    } for ${dayState[currentEditDay!].heading}`}
-                    state={
-                      stratState[STRATEGIES.OVERNIGHT_TREND_STATEGY] as OTS_CONFIG
-                    }
-                    onChange={changedProps =>
-                      stratOnChangeHandler(
-                        changedProps,
-                        STRATEGIES.OVERNIGHT_TREND_STATEGY
-                      )
-                    }
-                    onSubmit={commonOnSubmitHandler}
-                    onCancel={commonOnCancelHandler}
-                    isRunnable={false}
-                    strategy={STRATEGIES.OVERNIGHT_TREND_STATEGY}
                   />
                 ) : null}
               </Box>
