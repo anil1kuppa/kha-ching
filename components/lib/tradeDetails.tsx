@@ -1,10 +1,6 @@
-import React from 'react'
-
 import { STRATEGIES } from '../../lib/constants'
 import ATMStraddleDetails from '../trades/atmStraddle/TradeSetupDetails'
 import ATMStrangleDetails from '../trades/atmStrangle/TradeSetupDetails'
-import OTSDeails from '../trades/overnightTrendSelling/TradeSetupDetails'
-import DOSDetails from '../trades/directionalOptionSelling/TradeSetupDetails'
 import { SUPPORTED_TRADE_CONFIG } from '../../types/trade'
 import { Job } from 'bullmq'
 
@@ -21,15 +17,9 @@ const TradeDetails = ({
     <>
       {strategy === STRATEGIES.ATM_STRADDLE ? (
         <ATMStraddleDetails {...tradeDetails} {...jobDetails} />
-      ) : strategy === STRATEGIES.DIRECTIONAL_OPTION_SELLING ? (
-        <DOSDetails {...tradeDetails} {...jobDetails} />
       ) : strategy === STRATEGIES.ATM_STRANGLE ? (
         <ATMStrangleDetails {...tradeDetails} {...jobDetails} />
-      ) : strategy === STRATEGIES.OVERNIGHT_TREND_STATEGY ? (
-        <OTSDeails {...tradeDetails} {...jobDetails} />
-      ) 
-      :
-       null}
+      ) : null}
     </>
   )
 }
