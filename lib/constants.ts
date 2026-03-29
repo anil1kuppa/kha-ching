@@ -123,7 +123,6 @@ export const EXPIRY_TYPE_HUMAN = {
 
 export enum STRANGLE_ENTRY_STRATEGIES {
   DISTANCE_FROM_ATM = 'DISTANCE_FROM_ATM',
-  DELTA_STIKES = 'DELTA_STIKES',
   PERCENT_FROM_ATM='PERCENT_FROM_ATM',
   ENTRY_PRICE='ENTRY_PRICE'
 }
@@ -235,9 +234,6 @@ export const STRATEGIES_DETAILS = {
     ENTRY_STRATEGY_DETAILS: {
       [STRANGLE_ENTRY_STRATEGIES.DISTANCE_FROM_ATM]: {
         label: 'by distance from ATM strike'
-      },
-      [STRANGLE_ENTRY_STRATEGIES.DELTA_STIKES]: {
-        label: 'by option strike delta from live option chain ⚡️'
       },
       [STRANGLE_ENTRY_STRATEGIES.PERCENT_FROM_ATM]: {
         label: 'by percent from ATM%'

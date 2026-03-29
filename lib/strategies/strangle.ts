@@ -1,6 +1,5 @@
 import { ATM_STRANGLE_TRADE } from '../../types/trade'
 import {
-  ERROR_STRINGS,
   EXPIRY_TYPE,
   INSTRUMENTS,
   INSTRUMENT_DETAILS,
@@ -11,28 +10,22 @@ import {
 import console from '../logging'
 import { EXIT_TRADING_Q_NAME } from '../queue'
 import {
-  apiResponseObject,
   attemptBrokerOrders,
   ensureMarginForBasketOrder,
   getExpiryTradingSymbol,
   getHedgeForStrike,
   getIndexInstruments,
-  getStrikeByDelta,
   remoteOrderSuccessEnsurer,
-  SIGNALX_URL,
   syncGetKiteInstance,
   TradingSymbolInterface,
-  getTradingSymbolsByOptionPrice,
   getOTMStrangleByOptionPrice,
   withRemoteRetry,
   isMarketOpen
-  //getTradingSymbolsByPrice
 } from '../utils'
 import { createOrder, getATMStraddle as getATMStrikes } from './atmStraddle'
 import { doSquareOffPositions } from '../exit-strategies/autoSquareOff'
 import dayjs, { Dayjs } from 'dayjs'
 import { KiteOrder } from '../../types/kite'
-import axios from 'axios'
 import { SignalXUser } from '../../types/misc'
 
 export const getNearestContractDate = async (
@@ -63,7 +56,6 @@ const getStrangleStrikes = async ({
   entryStrategy,
   distanceFromAtm = 1,
   percentfromAtm=2,
-  deltaStrikes,
   expiryType,
   price=20
 }: {
@@ -74,7 +66,6 @@ const getStrangleStrikes = async ({
   entryStrategy: STRANGLE_ENTRY_STRATEGIES
   distanceFromAtm?: number
   percentfromAtm?:number
-  deltaStrikes?: number
   expiryType?: EXPIRY_TYPE
   price?:number
 }) => {
@@ -82,41 +73,7 @@ const getStrangleStrikes = async ({
 
   let lowerLegPEStrike
   let higherLegCEStrike
-  if (entryStrategy === STRANGLE_ENTRY_STRATEGIES.DELTA_STIKES) {
-    const nearestContractDate = await getNearestContractDate(
-      atmStrike,
-      nfoSymbol
-    )
-    try {
-      const { data: optionChain } = await axios.post(
-        `${SIGNALX_URL}/api/data/option_chain`,
-        {
-          instrument,
-          contract: nearestContractDate.format('DDMMMYYYY').toUpperCase()
-        },
-        {
-          headers: {
-            'X-API-KEY': process.env.SIGNALX_API_KEY
-          }
-        }
-      )
-      const strikes = getStrikeByDelta(deltaStrikes!, optionChain)
-      const { putStrike, callStrike } = strikes as {
-        putStrike: apiResponseObject
-        callStrike: apiResponseObject
-      }
-
-      lowerLegPEStrike = putStrike.StrikePrice
-      higherLegCEStrike = callStrike.StrikePrice
-    } catch (e) {
-      if (e.isAxiosError) {
-        if (e.response.status === 401) {
-          return Promise.reject(new Error(ERROR_STRINGS.PAID_FEATURE))
-        }
-        return Promise.reject(new Error(e.response.data))
-      }
-    }
-  } else if (entryStrategy === STRANGLE_ENTRY_STRATEGIES.PERCENT_FROM_ATM)
+  if (entryStrategy === STRANGLE_ENTRY_STRATEGIES.PERCENT_FROM_ATM)
   {
     lowerLegPEStrike =  Math.round((1-(percentfromAtm/100))* atmStrike / strikeStepSize!) * strikeStepSize! 
     higherLegCEStrike = Math.round((1+(percentfromAtm/100))* atmStrike / strikeStepSize!) * strikeStepSize! 
@@ -265,7 +222,6 @@ async function atmStrangle (args: ATM_STRANGLE_TRADE) {
       rollback,
       isHedgeEnabled,
       hedgeDistance,
-      deltaStrikes,
       entryStrategy = STRANGLE_ENTRY_STRATEGIES.DISTANCE_FROM_ATM,
       distanceFromAtm = 1,
       percentfromAtm,
@@ -315,7 +271,6 @@ async function atmStrangle (args: ATM_STRANGLE_TRADE) {
       distanceFromAtm,
       percentfromAtm,
       entryStrategy,
-      deltaStrikes,
       expiryType,
       price:optionPrice
     })
