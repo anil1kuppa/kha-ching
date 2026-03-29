@@ -1,49 +1,59 @@
-import axios from 'axios'
+import { withoutFwdSlash } from '../../lib/utils'
+import { queryAll, insertOne, updateRows, deleteRows } from '../../lib/dbUtils'
 
-import { withoutFwdSlash,orclsodaUrl } from '../../lib/utils'
-
-const orclEndpoint=`${orclsodaUrl}/trade_plans`
 export default async function plan (req, res) {
   const { dayOfWeek, config } = req.body
   try {
     if (req.method === 'POST') {
-      
-      //POST for SODA accepts an object and returns an arrray of ids
-      let updatedConfig={...config[0],collection: `${dayOfWeek}`} 
-      const  {data:{items:[{id}]}}=await axios.post(orclEndpoint,updatedConfig);
-      const {data} = await axios.get(`${orclEndpoint}/${id}`)
-      const newdata= {...data,id}
-      return res.json(newdata)
+      // Insert new trade plan(s)
+      const results = []
+      for (const planConfig of config) {
+        const result = await insertOne('trade_plans', {
+          collection: dayOfWeek,
+          config: JSON.stringify(planConfig)
+        })
+        if (result) {
+          results.push({ ...planConfig, id: result.id })
+        }
+      }
+      return res.json(results[0] || {})
     }
 
     if (req.method === 'PUT') {
-      await axios[req.method.toLowerCase()](
-        `${orclEndpoint}/${config.id}`,
-        config
-  );
-  const {data:getData} = await axios.get(`${orclEndpoint}/${config.id}`)
-  const data={...getData,id:config.id}
-      return res.json(data)
+      // Update existing trade plan
+      await updateRows(
+        'trade_plans',
+        { config: JSON.stringify(config) },
+        'id = $1',
+        [config.id]
+      )
+      const result = await queryAll(
+        'SELECT id, config, collection FROM trade_plans WHERE id = $1',
+        [config.id]
+      )
+      if (result.length > 0) {
+        const { id, config: configJson, collection } = result[0]
+        return res.json({ ...JSON.parse(configJson), id, collection })
+      }
+      return res.status(404).json({ error: 'Plan not found' })
     }
 
     if (req.method === 'DELETE') {
-      console.log(`${config.id}`);
-      const { data }=await axios[req.method.toLowerCase()](
-        `${orclEndpoint}/${config.id}`  );
-      return res.json(data)
+      await deleteRows('trade_plans', 'id = $1', [config.id])
+      return res.json({ success: true })
     }
-    const {data:{items}}= await axios(
-      `${orclEndpoint}`);
 
-const settings=items.map(items=>{
-  return ({...items.value,id:items.id})
- });
- return res.json(settings)
+    // GET all plans
+    const results = await queryAll(
+      'SELECT id, config, collection FROM trade_plans ORDER BY collection'
+    )
+    const settings = results.map(({ id, config: configJson }) => ({
+      ...JSON.parse(configJson),
+      id
+    }))
+    return res.json(settings)
   } catch (e) {
     console.log('[api/plan] error', e)
-    if (e.isAxiosError) {
-      return res.status(e.response.status).json(e.response.data || {})
-    }
-    return res.status(500).send(e)
+    return res.status(500).json({ error: e.message })
   }
 }
