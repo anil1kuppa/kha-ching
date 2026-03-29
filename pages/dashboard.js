@@ -215,44 +215,6 @@ export async function getServerSideProps (context) {
     }
   }
 
-  // const SIGNALX_API_KEY = process.env.SIGNALX_API_KEY
-  // if (!(SIGNALX_API_KEY && SIGNALX_API_KEY.length === 16)) {
-  //   return {
-  //     props: {
-  //       isInstallationValid: true
-  //     }
-  //   }
-  // }
-
-  // try {
-  //   const subscriptionData = await checkSubscriptionStatus(SIGNALX_API_KEY)
-  //   const { isPremiumUser, isClubUser, allowed, expireOn } = subscriptionData
-
-  //   if (!isClubUser && !isPremiumUser) {
-  //     // open source user
-  //     return {
-  //       props: {
-  //         isInstallationValid: true
-  //       }
-  //     }
-  //   }
-
-  //   // either club or premium
-  //   if (!allowed) {
-  //     // refetch immediately if subscription has expired
-  //     checkSubscriptionStatus.delete(SIGNALX_API_KEY, true)
-
-  //     return {
-  //       props: {
-  //         isInstallationValid: false,
-  //         expireOn,
-  //         subscriberType: isClubUser
-  //           ? SUBSCRIBER_TYPE.CLUB
-  //           : SUBSCRIBER_TYPE.PREMIUM
-  //       }
-  //     }
-  //   }
-
   //   // valid subscription
   //   const ttl = dayjs(expireOn).diff(dayjs(), 'days')
   //   if (ttl <= 3) {

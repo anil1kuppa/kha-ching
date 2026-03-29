@@ -34,12 +34,6 @@ function processJob (jobData: {
         ...jobResponse
       })
     }
-    // case EXIT_STRATEGIES.OBS_TRAIL_SL: {
-    //   return fyersTrailObsSL({
-    //     initialJobData,
-    //     ...jobResponse
-    //   })
-    // }
     default: {
       return null
     }
