@@ -1,15 +1,15 @@
-import axios from 'axios'
-import { omit } from 'lodash'
-import { useRouter } from 'next/router'
-import React, { useEffect, useState } from 'react'
+import axios from "axios"
+import { omit } from "lodash"
+import { useRouter } from "next/router"
+import React, { useEffect, useState } from "react"
 
 import {
   commonOnChangeHandler,
   formatFormDataForApi,
-  getSchedulingStateProps
-} from '../../../lib/browserUtils'
-import { STRATEGIES, STRATEGIES_DETAILS } from '../../../lib/constants'
-import Form from './TradeSetupForm'
+  getSchedulingStateProps,
+} from "../../../lib/browserUtils"
+import { STRATEGIES, STRATEGIES_DETAILS } from "../../../lib/constants"
+import Form from "./TradeSetupForm"
 
 const AtmStraddle = ({ strategy = STRATEGIES.ATM_STRADDLE }) => {
   const router = useRouter()
@@ -17,30 +17,25 @@ const AtmStraddle = ({ strategy = STRATEGIES.ATM_STRADDLE }) => {
 
   const getDefaultState = () => ({
     ...STRATEGIES_DETAILS[strategy].defaultFormState,
-    ...getSchedulingStateProps(strategy)
+    ...getSchedulingStateProps(strategy),
   })
 
   const [state, setState] = useState(getDefaultState())
 
   const onSubmit = async (formattedStateForApiProps = {}) => {
     if (state.runNow) {
-      const yes = await window.confirm(
-        'This will schedule this trade immediately. Are you sure?'
-      )
+      const yes = await window.confirm("This will schedule this trade immediately. Are you sure?")
       if (!yes) {
         setState({
           ...state,
-          runNow: false
+          runNow: false,
         })
         return
       }
     }
 
-    function handleSyncJob (props) {
-      return axios.post(
-        '/api/trades_day',
-        formatFormDataForApi({ strategy, data: props })
-      )
+    function handleSyncJob(props) {
+      return axios.post("/api/trades_day", formatFormDataForApi({ strategy, data: props }))
     }
 
     try {
@@ -49,16 +44,14 @@ const AtmStraddle = ({ strategy = STRATEGIES.ATM_STRADDLE }) => {
           .filter(key => state.instruments[key])
           .map(instrument =>
             handleSyncJob({
-              ...omit({ ...state, ...formattedStateForApiProps }, [
-                'instruments'
-              ]),
+              ...omit({ ...state, ...formattedStateForApiProps }, ["instruments"]),
               instrument,
-              strategy
+              strategy,
             })
           )
       )
       setState(getDefaultState())
-      router.push('/dashboard?tabId=0')
+      router.push("/dashboard?tabId=0")
     } catch (e) {
       console.error(e)
     }
@@ -73,14 +66,9 @@ const AtmStraddle = ({ strategy = STRATEGIES.ATM_STRADDLE }) => {
   }, [state.runNow])
 
   return (
-    <div style={{ marginBottom: '60px' }}>
+    <div style={{ marginBottom: "60px" }}>
       <h3>{heading}</h3>
-      <Form
-        strategy={strategy}
-        state={state}
-        onChange={onChange}
-        onSubmit={onSubmit}
-      />
+      <Form strategy={strategy} state={state} onChange={onChange} onSubmit={onSubmit} />
     </div>
   )
 }

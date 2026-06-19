@@ -1,34 +1,30 @@
-import { Link } from '@mui/material'
-import { useRouter } from 'next/router'
+import { Link } from "@mui/material"
+import { useRouter } from "next/router"
 
-import StratLayout from '../../components/StratLayout'
-import AtmStraddleSetup from '../../components/trades/atmStraddle'
-import AtmStrangleSetup from '../../components/trades/atmStrangle'
-import { EXIT_STRATEGIES, INSTRUMENTS } from '../../lib/constants'
+import StratLayout from "../../components/StratLayout"
+import AtmStraddleSetup from "../../components/trades/atmStraddle"
+import AtmStrangleSetup from "../../components/trades/atmStrangle"
+import { EXIT_STRATEGIES, INSTRUMENTS } from "../../lib/constants"
 
 const Strategy = () => {
   const router = useRouter()
   const { strategy } = router.query
 
   switch (strategy) {
-    case 'straddle': {
+    case "straddle": {
       return (
         <StratLayout>
           <AtmStraddleSetup
-            enabledInstruments={[
-              INSTRUMENTS.NIFTY,
-              INSTRUMENTS.BANKNIFTY,
-              INSTRUMENTS.FINNIFTY
-            ]}
+            enabledInstruments={[INSTRUMENTS.NIFTY, INSTRUMENTS.BANKNIFTY, INSTRUMENTS.FINNIFTY]}
             exitStrategies={[
               EXIT_STRATEGIES.INDIVIDUAL_LEG_SLM_1X,
-              EXIT_STRATEGIES.MULTI_LEG_PREMIUM_THRESHOLD
+              EXIT_STRATEGIES.MULTI_LEG_PREMIUM_THRESHOLD,
             ]}
           />
         </StratLayout>
       )
     }
-    case 'strangle': {
+    case "strangle": {
       return (
         <StratLayout>
           <AtmStrangleSetup
@@ -41,7 +37,7 @@ const Strategy = () => {
     default: {
       return (
         <StratLayout>
-          <Link href='/dashboard'>Nothing here. Go back to dashboard!</Link>
+          <Link href="/dashboard">Nothing here. Go back to dashboard!</Link>
         </StratLayout>
       )
     }

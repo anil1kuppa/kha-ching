@@ -1,4 +1,4 @@
-import React from 'react'
+import React from "react"
 import {
   FormControl,
   FormControlLabel,
@@ -6,31 +6,29 @@ import {
   FormLabel,
   RadioGroup,
   Radio,
-  Grid
-} from '@mui/material'
-import { VOLATILITY_TYPE } from '../../lib/constants'
+  Grid,
+} from "@mui/material"
+import { VOLATILITY_TYPE } from "../../lib/constants"
 
 const VolatilityTypeComponent = ({ state, onChange }) => {
   const volTypes = [VOLATILITY_TYPE.SHORT, VOLATILITY_TYPE.LONG]
   return (
     <Grid item xs={12}>
-      <FormControl component='fieldset'>
-        <FormLabel component='legend'>Vol type</FormLabel>
+      <FormControl component="fieldset">
+        <FormLabel component="legend">Vol type</FormLabel>
         <RadioGroup
-          aria-label='volatilityType'
-          name='volatilityType'
+          aria-label="volatilityType"
+          name="volatilityType"
           value={state.volatilityType}
-          onChange={e =>
-            onChange({ volatilityType: e.target.value as VOLATILITY_TYPE })
-          }
+          onChange={e => onChange({ volatilityType: e.target.value as VOLATILITY_TYPE })}
           row
         >
           {volTypes.map(volatilityType => (
             <FormControlLabel
               key={volatilityType}
               value={volatilityType}
-              control={<Radio size='small' />}
-              label={<Typography variant='body2'>{volatilityType}</Typography>}
+              control={<Radio size="small" />}
+              label={<Typography variant="body2">{volatilityType}</Typography>}
             />
           ))}
         </RadioGroup>

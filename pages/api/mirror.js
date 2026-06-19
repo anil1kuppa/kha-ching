@@ -1,8 +1,10 @@
-import axios from 'axios'
-import { KiteConnect } from 'kiteconnect'
+import axios from "axios"
+import { KiteConnect } from "kiteconnect"
+import { placeOrder } from "../../lib/kiteUtils"
 
-import withSession from '../../lib/session'
-import { useKiteTicker } from '../../lib/socket/ticker'
+import withSession from "../../lib/session"
+import { useKiteTicker } from "../../lib/socket/ticker"
+import logger from "../../lib/logger"
 const apiKey = process.env.KITE_API_KEY
 
 // Giveaway to the publisher
@@ -15,58 +17,51 @@ const apiKey = process.env.KITE_API_KEY
 // 2. TRADES_HOST_URL - the trades actually punched on his account
 // 3. SIGNALX_MIRROR_USER_TYPE=CONSUMER
 
-const {
-  SIGNALX_MIRROR_URL,
-  TRADES_HOST_URL,
-  SIGNALX_MIRROR_USER_TYPE
-} = process.env
+const { SIGNALX_MIRROR_URL, TRADES_HOST_URL, SIGNALX_MIRROR_USER_TYPE } = process.env
 
-async function updateStatus (statusCode, ...params) {
-  console.log(statusCode, ...params)
+async function updateStatus(statusCode, ...params) {
+  logger.info("updateStatus", statusCode, ...params)
   try {
     const {
-      data: { status_history = [], ...props }
+      data: { status_history = [], ...props },
     } = await axios(SIGNALX_MIRROR_URL)
 
     await axios.put(SIGNALX_MIRROR_URL, {
       ...props,
-      connected: statusCode === 'connect',
+      connected: statusCode === "connect",
       status_history: [
         {
           user: SIGNALX_MIRROR_USER_TYPE,
           status_code: statusCode,
-          timestamp: new Date()
+          timestamp: new Date(),
         },
-        ...status_history
-      ]
+        ...status_history,
+      ],
     })
   } catch (e) {
-    console.log('[updateStatus] error', e)
+    logger.error("[updateStatus] error", e)
   }
 }
 
-async function orderUpdate (trade, isTestTrade = false) {
-  console.log('[mirror new orderUpdate]', trade, isTestTrade)
+async function orderUpdate(trade, isTestTrade = false) {
+  logger.info("[mirror new orderUpdate]", trade, isTestTrade)
   try {
     if (!isTestTrade) {
       axios.post(TRADES_HOST_URL, trade)
     }
 
-    if (SIGNALX_MIRROR_USER_TYPE !== 'PUBLISHER') {
+    if (SIGNALX_MIRROR_USER_TYPE !== "PUBLISHER") {
       return
     }
 
     const { data: subscribersDetails } = await axios(SIGNALX_MIRROR_URL)
-    const {
-      api_key: subscriberApiKey,
-      access_token: subscriberAccessToken
-    } = subscribersDetails
+    const { api_key: subscriberApiKey, access_token: subscriberAccessToken } = subscribersDetails
 
     const kc =
       subscriberApiKey && subscriberAccessToken
         ? new KiteConnect({
             api_key: subscriberApiKey,
-            access_token: subscriberAccessToken
+            access_token: subscriberAccessToken,
           })
         : null
 
@@ -82,46 +77,46 @@ async function orderUpdate (trade, isTestTrade = false) {
       transaction_type,
       validity,
       product,
-      quantity
+      quantity,
     } = trade
 
     if (status !== kc.STATUS_COMPLETE || exchange !== kc.EXCHANGE_NFO) {
       return
     }
 
-    const orderRes = await kc.placeOrder(variety, {
+    const orderRes = await placeOrder(kc, variety, {
       tradingsymbol,
       quantity,
       exchange,
       transaction_type,
       order_type: kc.ORDER_TYPE_MARKET,
       product: product,
-      validity
+      validity,
     })
 
-    console.log(orderRes)
+    logger.info("orderRes", orderRes)
   } catch (e) {
-    console.log('[orderUpdate] error', e)
+    logger.error("[orderUpdate] error", e)
   }
 }
 
 export default withSession(async (req, res) => {
-  const user = req.session.get('user')
+  const user = req.session.get("user")
 
   if (!user) {
-    return res.status(401).send('Unauthorized')
+    return res.status(401).send("Unauthorized")
   }
 
   useKiteTicker({
     apiKey,
     accessToken: user.session.access_token,
-    onConnect: () => updateStatus('connect'),
-    onDisconnect: e => updateStatus('disconnect', e),
-    onError: e => updateStatus('closed_with_error', e),
-    onClose: () => updateStatus('clean_close'),
-    onReconnect: (...args) => updateStatus('reconnect', ...args),
-    onNoReconnect: () => updateStatus('noreconnect'),
-    onOrderUpdate: trade => orderUpdate(trade)
+    onConnect: () => updateStatus("connect"),
+    onDisconnect: e => updateStatus("disconnect", e),
+    onError: e => updateStatus("closed_with_error", e),
+    onClose: () => updateStatus("clean_close"),
+    onReconnect: (...args) => updateStatus("reconnect", ...args),
+    onNoReconnect: () => updateStatus("noreconnect"),
+    onOrderUpdate: trade => orderUpdate(trade),
   })
 
   if (req.body?.test_trade) {
@@ -130,28 +125,28 @@ export default withSession(async (req, res) => {
 
   res.json({
     mirrorUrl: SIGNALX_MIRROR_URL,
-    userType: SIGNALX_MIRROR_USER_TYPE
+    userType: SIGNALX_MIRROR_USER_TYPE,
   })
 })
 
 const testPayload = {
   unfilled_quantity: 0,
-  checksum: '',
+  checksum: "",
   parent_order_id: null,
-  status: 'COMPLETE',
+  status: "COMPLETE",
   status_message: null,
   status_message_raw: null,
-  order_timestamp: '2021-06-16 10:01:12',
-  exchange_update_timestamp: '2021-06-16 10:01:12',
-  exchange_timestamp: '2021-06-16 10:01:12',
-  variety: 'regular',
-  exchange: 'NFO',
-  tradingsymbol: 'BANKNIFTY21JUN40000CE',
+  order_timestamp: "2021-06-16 10:01:12",
+  exchange_update_timestamp: "2021-06-16 10:01:12",
+  exchange_timestamp: "2021-06-16 10:01:12",
+  variety: "regular",
+  exchange: "NFO",
+  tradingsymbol: "BANKNIFTY21JUN40000CE",
   instrument_token: 11247618,
-  order_type: 'MARKET',
-  transaction_type: 'BUY',
-  validity: 'DAY',
-  product: 'MIS',
+  order_type: "MARKET",
+  transaction_type: "BUY",
+  validity: "DAY",
+  product: "MIS",
   quantity: 25,
   disclosed_quantity: 0,
   price: 0,
@@ -162,5 +157,5 @@ const testPayload = {
   cancelled_quantity: 0,
   market_protection: 0,
   tag: null,
-  _createdOn: '2021-06-16T04:31:13.195Z'
+  _createdOn: "2021-06-16T04:31:13.195Z",
 }

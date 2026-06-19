@@ -1,16 +1,16 @@
-import React from 'react'
-import { Box } from '@mui/material'
-import Typography from '@mui/material/Typography'
-import Slider from '@mui/material/Slider'
+import React from "react"
+import { Box } from "@mui/material"
+import Typography from "@mui/material/Typography"
+import Slider from "@mui/material/Slider"
 
-export default function DiscreteSlider ({
+export default function DiscreteSlider({
   label,
   defaultValue,
   step,
   min,
   max,
   value,
-  onChange
+  onChange,
 }: any) {
   return (
     <Box sx={{ width: 300 }}>
@@ -22,7 +22,7 @@ export default function DiscreteSlider ({
         marks
         min={min}
         max={max}
-        valueLabelDisplay='auto'
+        valueLabelDisplay="auto"
         onChange={onChange}
       />
     </Box>

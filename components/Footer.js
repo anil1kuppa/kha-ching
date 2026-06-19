@@ -1,21 +1,21 @@
-import { Divider, Link, Typography } from '@mui/material'
-import Box from '@mui/material/Box'
+import { Divider, Link, Typography } from "@mui/material"
+import Box from "@mui/material/Box"
 
 const Footer = () => (
   <div>
     <Divider style={{ marginBottom: 16 }} />
-    <Typography>
-      <Box fontStyle='italic' fontSize={14} style={{ opacity: '0.8' }}>
-        <Link href='mailto:help@signalx.trade'>Get in touch</Link> for any
-        queries, suggestions, or feedback. | Learn all about{' '}
-        <Link target='_blank' rel='noreferrer' href='https://signalx.club'>
+    <Typography component="div">
+      <Box fontStyle="italic" fontSize={14} style={{ opacity: "0.8" }}>
+        <Link href="mailto:help@signalx.trade">Get in touch</Link> for any queries, suggestions, or
+        feedback. | Learn all about{" "}
+        <Link target="_blank" rel="noreferrer" href="https://signalx.club">
           SignalX
         </Link>
-        . | By using SignalX you agree to the{' '}
+        . | By using SignalX you agree to the{" "}
         <Link
-          target='_blank'
-          rel='noreferrer'
-          href='https://signalx.club/SignalX-User-Agreement-ac65c4c19279457ba7d133fdcaf2b21d'
+          target="_blank"
+          rel="noreferrer"
+          href="https://signalx.club/SignalX-User-Agreement-ac65c4c19279457ba7d133fdcaf2b21d"
         >
           terms and conditions.
         </Link>

@@ -2,13 +2,33 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Next.js: Dev Server",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "pnpm run dev"
+    },
+    {
+      "name": "Next.js: Full Stack",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "pnpm run dev",
+      "serverReadyAction": {
+        "action": "debugWithChrome",
+        "pattern": "- Local:.+(https?://.+)",
+        "uriFormat": "%s",
+        "webRoot": "${workspaceFolder}"
+      }
+    },
+    {
+      "type": "firefox",
+      "request": "attach",
+      "name": "Attach Firefox"
+    },
+    {
       "type": "node",
       "request": "attach",
-      "name": "Launch Program",
-      "skipFiles": [
-        "${workspaceFolder}/node_modules/**/*.js",
-        "<node_internals>/**"
-      ],
+      "name": "Attach Node (9229)",
+      "skipFiles": ["${workspaceFolder}/node_modules/**/*.js", "<node_internals>/**"],
       "port": 9229
     }
   ]

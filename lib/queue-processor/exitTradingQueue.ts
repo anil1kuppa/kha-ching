@@ -1,17 +1,16 @@
-import { Worker } from 'bullmq'
-import { KiteOrder } from '../../types/kite'
-import { SUPPORTED_TRADE_CONFIG } from '../../types/trade'
+import { Worker } from "bullmq"
+import type { KiteOrder } from "../../types/kite"
+import type { ATM_STRADDLE_TRADE, ATM_STRANGLE_TRADE, SUPPORTED_TRADE_CONFIG } from "../../types/trade"
 
-import { EXIT_STRATEGIES } from '../constants'
-import individualLegExitOrders from '../exit-strategies/individualLegExitOrders'
-import multiLegPremiumThreshold, {
-  CombinedPremiumJobDataInterface
-} from '../exit-strategies/multiLegPremiumThreshold'
-import console from '../logging'
-import { EXIT_TRADING_Q_NAME, redisConnection } from '../queue'
-import { getCustomBackoffStrategies, ms } from '../utils'
+type StraddleOrStrangleTrade = ATM_STRADDLE_TRADE | ATM_STRANGLE_TRADE
 
-function processJob (jobData: {
+import { EXIT_STRATEGIES } from "../constants"
+import individualLegExitOrders from "../exit-strategies/individualLegExitOrders"
+import logger from "../logger"
+import { EXIT_TRADING_Q_NAME, redisConnection } from "../queue"
+import { getCustomBackoffStrategies, ms } from "../utils"
+
+function processJob(jobData: {
   initialJobData: SUPPORTED_TRADE_CONFIG
   jobResponse: {
     rawKiteOrdersResponse: KiteOrder[]
@@ -20,18 +19,12 @@ function processJob (jobData: {
 }) {
   const { initialJobData, jobResponse } = jobData
 
-  const { exitStrategy } = initialJobData
+  const { exitStrategy } = initialJobData as StraddleOrStrangleTrade
   switch (exitStrategy) {
     case EXIT_STRATEGIES.INDIVIDUAL_LEG_SLM_1X: {
       return individualLegExitOrders({
         initialJobData,
-        ...jobResponse
-      })
-    }
-    case EXIT_STRATEGIES.MULTI_LEG_PREMIUM_THRESHOLD: {
-      return multiLegPremiumThreshold({
-        initialJobData: initialJobData as CombinedPremiumJobDataInterface,
-        ...jobResponse
+        ...jobResponse,
       })
     }
     default: {
@@ -47,7 +40,7 @@ const worker = new Worker(
       const exitOrders = await processJob(job.data)
       return exitOrders
     } catch (e) {
-      console.log(e.message ? e.message : e)
+      logger.info(e.message ? e.message : e)
       throw new Error(e)
     }
   },
@@ -55,15 +48,15 @@ const worker = new Worker(
     connection: redisConnection,
     concurrency: 100,
     settings: {
-      backoffStrategies: getCustomBackoffStrategies()
+      backoffStrategy: getCustomBackoffStrategies(),
     },
-    lockDuration: ms(5 * 60)
+    lockDuration: ms(5 * 60),
   }
 )
 
-worker.on('error', err => {
+worker.on("error", err => {
   // log the error
-  console.log('🔴 [exitTradingQueue] worker error', err)
+  logger.error("🔴 [exitTradingQueue] worker error", err)
 })
 
 // worker.on('completed', (job) => {

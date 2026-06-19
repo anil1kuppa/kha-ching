@@ -1,59 +1,132 @@
-import { withoutFwdSlash } from '../../lib/utils'
-import { queryAll, insertOne, updateRows, deleteRows } from '../../lib/dbUtils'
+import { db } from "../../lib/drizzle"
+import { tradePlans } from "../../lib/schema"
+import logger from "../../lib/logger"
 
-export default async function plan (req, res) {
-  const { dayOfWeek, config } = req.body
+const DB_PLAN_COLUMNS = new Set([
+  "name",
+  "strategy",
+  "instrument",
+  "expiryType",
+  "productType",
+  "dayOfWeek",
+  "exitStrategy",
+  "combinedExitStrategy",
+  "runAt",
+  "squareOffTime",
+  "expiresAt",
+  "expireIfUnsuccessfulInMins",
+  "lots",
+  "slmPercent",
+  "slOrderType",
+  "slLimitPricePercent",
+  "maxProfitPoints",
+  "isMaxProfitEnabled",
+  "maxLossPoints",
+  "isMaxLossEnabled",
+  "thresholdSkewPercent",
+  "maxSkewPercent",
+  "takeTradeIrrespectiveSkew",
+  "volatilityType",
+  "trailEveryPercentageChangeValue",
+  "trailingSlPercent",
+  "trailingMaxProfitPoints",
+  "trailingMaxLossPoints",
+  "isAutoSquareOffEnabled",
+  "autoSquareOffTime",
+])
+
+const TIMESTAMP_COLUMNS = new Set(["runAt", "squareOffTime", "expiresAt", "autoSquareOffTime"])
+
+const toDate = value => {
+  if (!value) return value
+  if (value instanceof Date) return value
+  const d = new Date(value)
+  return isNaN(d.getTime()) ? value : d
+}
+
+const mapPlanToDb = (planConfig = {}, dayOfWeek) => {
+  const normalizedPlan = {
+    ...planConfig,
+    dayOfWeek: dayOfWeek || planConfig.dayOfWeek || planConfig.day_of_week,
+    autoSquareOffTime: planConfig.autoSquareOffProps?.time || planConfig.autoSquareOffTime,
+  }
+
+  return Object.entries(normalizedPlan).reduce((accum, [key, value]) => {
+    if (value === undefined || key === "id" || key === "collection") {
+      return accum
+    }
+
+    if (DB_PLAN_COLUMNS.has(key)) {
+      accum[key] = TIMESTAMP_COLUMNS.has(key) ? toDate(value) : value
+    }
+    return accum
+  }, {})
+}
+
+const mapPlanFromDb = row => {
+  const normalizedRow = Object.fromEntries(
+    Object.entries(row).filter(([key, value]) => value != null && key !== "createdAt" && key !== "updatedAt")
+  )
+
+  return {
+    ...normalizedRow,
+    autoSquareOffProps: row.autoSquareOffTime
+      ? { time: row.autoSquareOffTime, deletePendingOrders: true }
+      : undefined,
+  }
+}
+
+export default async function plan(req, res) {
+  const { dayOfWeek, config } = req.body || {}
+
   try {
-    if (req.method === 'POST') {
-      // Insert new trade plan(s)
+    if (req.method === "POST") {
+      const planConfigs = Array.isArray(config) ? config : [config]
       const results = []
-      for (const planConfig of config) {
-        const result = await insertOne('trade_plans', {
-          collection: dayOfWeek,
-          config: JSON.stringify(planConfig)
-        })
-        if (result) {
-          results.push({ ...planConfig, id: result.id })
+
+      for (const planConfig of planConfigs) {
+        const inserted = await db
+          .insert(tradePlans)
+          .values(mapPlanToDb(planConfig, dayOfWeek))
+          .returning()
+
+        if (inserted.length > 0) {
+          results.push(mapPlanFromDb(inserted[0]))
         }
       }
+
       return res.json(results[0] || {})
     }
 
-    if (req.method === 'PUT') {
-      // Update existing trade plan
-      await updateRows(
-        'trade_plans',
-        { config: JSON.stringify(config) },
-        'id = $1',
-        [config.id]
-      )
-      const result = await queryAll(
-        'SELECT id, config, collection FROM trade_plans WHERE id = $1',
-        [config.id]
-      )
+    if (req.method === "PUT") {
+      const planId = config?.id || req.body?.id
+      await db
+        .update(tradePlans)
+        .set(mapPlanToDb(config, dayOfWeek))
+        .where(tradePlans.id.eq(planId))
+
+      const result = await db.select().from(tradePlans).where(tradePlans.id.eq(planId))
+
       if (result.length > 0) {
-        const { id, config: configJson, collection } = result[0]
-        return res.json({ ...JSON.parse(configJson), id, collection })
+        return res.json(mapPlanFromDb(result[0]))
       }
-      return res.status(404).json({ error: 'Plan not found' })
+
+      return res.status(404).json({ error: "Plan not found" })
     }
 
-    if (req.method === 'DELETE') {
-      await deleteRows('trade_plans', 'id = $1', [config.id])
+    if (req.method === "DELETE") {
+      await db.delete(tradePlans).where(tradePlans.id.eq(config.id))
       return res.json({ success: true })
     }
 
-    // GET all plans
-    const results = await queryAll(
-      'SELECT id, config, collection FROM trade_plans ORDER BY collection'
-    )
-    const settings = results.map(({ id, config: configJson }) => ({
-      ...JSON.parse(configJson),
-      id
-    }))
-    return res.json(settings)
+    const results = await db
+      .select()
+      .from(tradePlans)
+      .orderBy(tradePlans.dayOfWeek, tradePlans.createdAt)
+
+    return res.json(results.map(mapPlanFromDb))
   } catch (e) {
-    console.log('[api/plan] error', e)
+    logger.error("[api/plan] error", e)
     return res.status(500).json({ error: e.message })
   }
 }

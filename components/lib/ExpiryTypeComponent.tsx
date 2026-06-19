@@ -1,4 +1,4 @@
-import React from 'react'
+import React from "react"
 import {
   FormControl,
   FormControlLabel,
@@ -6,39 +6,29 @@ import {
   FormLabel,
   RadioGroup,
   Radio,
-  Grid
-} from '@mui/material'
-import { EXPIRY_TYPE, EXPIRY_TYPE_HUMAN } from '../../lib/constants'
+  Grid,
+} from "@mui/material"
+import { EXPIRY_TYPE, EXPIRY_TYPE_HUMAN } from "../../lib/constants"
 
 const ExpiryTypeComponent = ({ state, onChange }) => {
-  const expiryTypes = [
-    EXPIRY_TYPE.CURRENT,
-    EXPIRY_TYPE.NEXT,
-    EXPIRY_TYPE.MONTHLY
-  ]
+  const expiryTypes = [EXPIRY_TYPE.CURRENT, EXPIRY_TYPE.NEXT, EXPIRY_TYPE.MONTHLY]
   return (
     <Grid item xs={12}>
-      <FormControl component='fieldset'>
-        <FormLabel component='legend'>Option Expiry</FormLabel>
+      <FormControl component="fieldset">
+        <FormLabel component="legend">Option Expiry</FormLabel>
         <RadioGroup
-          aria-label='expiryTypes'
-          name='expiryType'
+          aria-label="expiryTypes"
+          name="expiryType"
           value={state.expiryType}
-          onChange={e =>
-            onChange({ expiryType: e.target.value as EXPIRY_TYPE })
-          }
+          onChange={e => onChange({ expiryType: e.target.value as EXPIRY_TYPE })}
           row
         >
           {expiryTypes.map(expiryType => (
             <FormControlLabel
               key={expiryType}
               value={expiryType}
-              control={<Radio size='small' />}
-              label={
-                <Typography variant='body2'>
-                  {EXPIRY_TYPE_HUMAN[expiryType]}
-                </Typography>
-              }
+              control={<Radio size="small" />}
+              label={<Typography variant="body2">{EXPIRY_TYPE_HUMAN[expiryType]}</Typography>}
             />
           ))}
         </RadioGroup>

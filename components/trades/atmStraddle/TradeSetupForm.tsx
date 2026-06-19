@@ -10,29 +10,29 @@ import {
   Radio,
   RadioGroup,
   TextField,
-  Typography
-} from '@mui/material'
-import { TimePicker } from '@mui/x-date-pickers/TimePicker'
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns'
-import dayjs from 'dayjs'
-import React from 'react'
+  Typography,
+} from "@mui/material"
+import { TimePicker } from "@mui/x-date-pickers/TimePicker"
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider"
+import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns"
+import dayjs from "dayjs"
+import React from "react"
 
-import { ensureIST, formatFormDataForApi } from '../../../lib/browserUtils'
+import { ensureIST, formatFormDataForApi } from "../../../lib/browserUtils"
 import {
   EXIT_STRATEGIES,
   EXIT_STRATEGIES_DETAILS,
   INSTRUMENT_DETAILS,
   INSTRUMENTS,
-  STRATEGIES
-} from '../../../lib/constants'
-import { ATM_STRADDLE_CONFIG, AvailablePlansConfig } from '../../../types/plans'
-import HedgeComponent from '../../lib/HedgeComponent'
-import ProductTypeComponent from '../../lib/ProductTypeComponent'
-import VolatilityTypeComponent from '../../lib/VolatilityTypeComponent'
-import RollbackComponent from '../../lib/RollbackComponent'
-import SlManagerComponent from '../../lib/SlManagerComponent'
-import ExpiryTypeComponent from '../../lib/ExpiryTypeComponent'
+  STRATEGIES,
+} from "../../../lib/constants"
+import { ATM_STRADDLE_CONFIG, AvailablePlansConfig } from "../../../types/plans"
+import HedgeComponent from "../../lib/HedgeComponent"
+import ProductTypeComponent from "../../lib/ProductTypeComponent"
+import VolatilityTypeComponent from "../../lib/VolatilityTypeComponent"
+import RollbackComponent from "../../lib/RollbackComponent"
+import SlManagerComponent from "../../lib/SlManagerComponent"
+import ExpiryTypeComponent from "../../lib/ExpiryTypeComponent"
 
 interface ATMStraddleTradeSetupFormProps {
   formHeading?: string
@@ -51,7 +51,7 @@ const TradeSetupForm = ({
   onChange,
   onSubmit,
   onCancel,
-  isRunnable = true
+  isRunnable = true,
 }: ATMStraddleTradeSetupFormProps) => {
   const isSchedulingDisabled = false
 
@@ -62,10 +62,7 @@ const TradeSetupForm = ({
 
   const exitStrategies =
     strategy === STRATEGIES.ATM_STRADDLE
-      ? [
-          EXIT_STRATEGIES.INDIVIDUAL_LEG_SLM_1X,
-          EXIT_STRATEGIES.MULTI_LEG_PREMIUM_THRESHOLD
-        ]
+      ? [EXIT_STRATEGIES.INDIVIDUAL_LEG_SLM_1X, EXIT_STRATEGIES.MULTI_LEG_PREMIUM_THRESHOLD]
       : [EXIT_STRATEGIES.INDIVIDUAL_LEG_SLM_1X]
 
   const handleFormSubmit = e => {
@@ -76,23 +73,23 @@ const TradeSetupForm = ({
   return (
     <form noValidate>
       <Paper style={{ padding: 16 }}>
-        <Typography variant='h6' style={{ marginBottom: 16 }}>
-          {formHeading ?? 'Setup new trade'}
+        <Typography variant="h6" style={{ marginBottom: 16 }}>
+          {formHeading ?? "Setup new trade"}
         </Typography>
-        <Grid container alignItems='flex-start' spacing={2}>
-        <Grid item xs={12}>
+        <Grid container alignItems="flex-start" spacing={2}>
+          <Grid item xs={12}>
             <TextField
               fullWidth
-              name='name'
+              name="name"
               value={state.name}
               onChange={e => onChange({ name: e.target.value || undefined })}
-              label='Name of trade '
+              label="Name of trade "
             />
-         </Grid>
-      
+          </Grid>
+
           <Grid item xs={12}>
-            <FormControl component='fieldset'>
-              <FormLabel component='legend'>Instruments</FormLabel>
+            <FormControl component="fieldset">
+              <FormLabel component="legend">Instruments</FormLabel>
               <FormGroup row>
                 {enabledInstruments.map(instrument => (
                   <FormControlLabel
@@ -100,14 +97,14 @@ const TradeSetupForm = ({
                     label={INSTRUMENT_DETAILS[instrument].displayName}
                     control={
                       <Checkbox
-                        name='instruments'
+                        name="instruments"
                         disabled={state.disableInstrumentChange}
                         checked={state.instruments[instrument]}
                         onChange={() => {
                           onChange({
                             instruments: {
-                              [instrument]: !state.instruments[instrument]
-                            } as Record<INSTRUMENTS, boolean>
+                              [instrument]: !state.instruments[instrument],
+                            } as Record<INSTRUMENTS, boolean>,
                           })
                         }}
                       />
@@ -127,90 +124,74 @@ const TradeSetupForm = ({
           <Grid item xs={12}>
             <TextField
               fullWidth
-              name='lots'
+              name="lots"
               value={state.lots}
               onChange={e => onChange({ lots: +e.target.value || undefined })}
-              label='# Lots'
+              label="# Lots"
             />
           </Grid>
           <Grid item xs={6}>
             <TextField
               fullWidth
-              name='maxSkewPercent'
+              name="maxSkewPercent"
               value={state.maxSkewPercent}
-              onChange={e =>
-                onChange({ maxSkewPercent: +e.target.value || undefined })
-              }
-              label='Ideal skew %'
+              onChange={e => onChange({ maxSkewPercent: +e.target.value || undefined })}
+              label="Ideal skew %"
             />
           </Grid>
           <Grid item xs={6}>
             <TextField
               fullWidth
-              name='thresholdSkewPercent'
+              name="thresholdSkewPercent"
               value={state.thresholdSkewPercent}
-              onChange={e =>
-                onChange({ thresholdSkewPercent: +e.target.value || undefined })
-              }
-              label='Threshold skew %'
+              onChange={e => onChange({ thresholdSkewPercent: +e.target.value || undefined })}
+              label="Threshold skew %"
             />
           </Grid>
           <Grid item xs={12}>
             <TextField
               fullWidth
-              name='expireIfUnsuccessfulInMins'
+              name="expireIfUnsuccessfulInMins"
               value={state.expireIfUnsuccessfulInMins}
               onChange={e =>
                 onChange({
-                  expireIfUnsuccessfulInMins: +e.target.value || undefined
+                  expireIfUnsuccessfulInMins: +e.target.value || undefined,
                 })
               }
-              label='Run skew checker for (in mins)'
+              label="Run skew checker for (in mins)"
             />
           </Grid>
 
           <Grid item xs={12} style={{ marginBottom: 16 }}>
-            <FormControl component='fieldset'>
-              <FormLabel component='legend'>
-                Once skew checker has expired
-              </FormLabel>
+            <FormControl component="fieldset">
+              <FormLabel component="legend">Once skew checker has expired</FormLabel>
               <RadioGroup
-                aria-label='takeTradeIrrespectiveSkew'
-                name='takeTradeIrrespectiveSkew'
+                aria-label="takeTradeIrrespectiveSkew"
+                name="takeTradeIrrespectiveSkew"
                 value={state.takeTradeIrrespectiveSkew}
                 onChange={() =>
                   onChange({
-                    takeTradeIrrespectiveSkew: !state.takeTradeIrrespectiveSkew
+                    takeTradeIrrespectiveSkew: !state.takeTradeIrrespectiveSkew,
                   })
                 }
               >
                 <FormControlLabel
                   value={false}
-                  control={<Radio size='small' />}
+                  control={<Radio size="small" />}
                   label={
-                    <Typography variant='body2'>
-                      Reject trade as skew never converged
-                    </Typography>
+                    <Typography variant="body2">Reject trade as skew never converged</Typography>
                   }
                 />
                 <FormControlLabel
                   value
-                  control={<Radio size='small' />}
-                  label={
-                    <Typography variant='body2'>
-                      Enter trade irrespective of skew
-                    </Typography>
-                  }
+                  control={<Radio size="small" />}
+                  label={<Typography variant="body2">Enter trade irrespective of skew</Typography>}
                 />
               </RadioGroup>
             </FormControl>
           </Grid>
 
-          <SlManagerComponent
-            state={state}
-            onChange={onChange}
-            exitStrategies={exitStrategies}
-          />
+          <SlManagerComponent state={state} onChange={onChange} exitStrategies={exitStrategies} />
 
           <HedgeComponent
             volatilityType={state.volatilityType}
@@ -218,84 +199,84 @@ const TradeSetupForm = ({
             hedgeDistance={state.hedgeDistance}
             onChange={onChange}
           />
-  <Grid item xs={12}>
-    <FormControl component='fieldset'>
-      <FormGroup>
-        <FormControlLabel
-          key='trailingMaxLossPoints'
-          label='Square off if losses breach (in points)'
-          control={
-            <Checkbox
-              checked={state.isMaxLossEnabled}
-              onChange={() =>
-                onChange({
-                  isMaxLossEnabled: !state.isMaxLossEnabled
-                })
-              }
-            />
-          }
-        />
-        {state.isMaxLossEnabled ? (
-    <TextField
-    fullWidth
-    name='maxLossPoints'
-    value={state.trailingMaxLossPoints}
-    onChange={e =>
-      onChange({
-        trailingMaxLossPoints: +e.target.value || undefined
-      })
-    }
-    label='Max Loss in points'
-  />
-        ) : null}
-      </FormGroup>
-    </FormControl>
-  </Grid>
-  <Grid item xs={12}>
-    <FormControl component='fieldset'>
-      <FormGroup>
-        <FormControlLabel
-          key='maxProfitPoints'
-          label='Square off if profits breach (in points)'
-          control={
-            <Checkbox
-              checked={state.isMaxProfitEnabled}
-              onChange={() =>
-                onChange({
-                  isMaxProfitEnabled: !state.isMaxProfitEnabled
-                })
-              }
-            />
-          }
-        />
-        {state.isMaxProfitEnabled ? (
-    <TextField
-    fullWidth
-    name='maxProfitPoints'
-    value={state.trailingMaxProfitPoints}
-    onChange={e =>
-      onChange({
-        trailingMaxProfitPoints: +e.target.value || undefined
-      })
-    }
-    label='Max Profit in points'
-  />
-        ) : null}
-      </FormGroup>
-    </FormControl>
-  </Grid>
           <Grid item xs={12}>
-            <FormControl component='fieldset'>
+            <FormControl component="fieldset">
               <FormGroup>
                 <FormControlLabel
-                  key='autoSquareOff'
-                  label='Auto Square off'
+                  key="trailingMaxLossPoints"
+                  label="Square off if losses breach (in points)"
+                  control={
+                    <Checkbox
+                      checked={state.isMaxLossEnabled}
+                      onChange={() =>
+                        onChange({
+                          isMaxLossEnabled: !state.isMaxLossEnabled,
+                        })
+                      }
+                    />
+                  }
+                />
+                {state.isMaxLossEnabled ? (
+                  <TextField
+                    fullWidth
+                    name="maxLossPoints"
+                    value={state.trailingMaxLossPoints}
+                    onChange={e =>
+                      onChange({
+                        trailingMaxLossPoints: +e.target.value || undefined,
+                      })
+                    }
+                    label="Max Loss in points"
+                  />
+                ) : null}
+              </FormGroup>
+            </FormControl>
+          </Grid>
+          <Grid item xs={12}>
+            <FormControl component="fieldset">
+              <FormGroup>
+                <FormControlLabel
+                  key="maxProfitPoints"
+                  label="Square off if profits breach (in points)"
+                  control={
+                    <Checkbox
+                      checked={state.isMaxProfitEnabled}
+                      onChange={() =>
+                        onChange({
+                          isMaxProfitEnabled: !state.isMaxProfitEnabled,
+                        })
+                      }
+                    />
+                  }
+                />
+                {state.isMaxProfitEnabled ? (
+                  <TextField
+                    fullWidth
+                    name="maxProfitPoints"
+                    value={state.trailingMaxProfitPoints}
+                    onChange={e =>
+                      onChange({
+                        trailingMaxProfitPoints: +e.target.value || undefined,
+                      })
+                    }
+                    label="Max Profit in points"
+                  />
+                ) : null}
+              </FormGroup>
+            </FormControl>
+          </Grid>
+          <Grid item xs={12}>
+            <FormControl component="fieldset">
+              <FormGroup>
+                <FormControlLabel
+                  key="autoSquareOff"
+                  label="Auto Square off"
                   control={
                     <Checkbox
                       checked={state.isAutoSquareOffEnabled}
                       onChange={() =>
                         onChange({
-                          isAutoSquareOffEnabled: !state.isAutoSquareOffEnabled
+                          isAutoSquareOffEnabled: !state.isAutoSquareOffEnabled,
                         })
                       }
                     />
@@ -304,12 +285,14 @@ const TradeSetupForm = ({
                 {state.isAutoSquareOffEnabled ? (
                   <LocalizationProvider dateAdapter={AdapterDateFns}>
                     <TimePicker
-                      label='Square off time'
+                      label="Square off time"
                       value={state.squareOffTime}
                       onChange={selectedDate => {
                         onChange({ squareOffTime: ensureIST(selectedDate) })
                       }}
-                      renderInput={(params) => <TextField {...params} margin='normal' id='time-picker' />}
+                      renderInput={params => (
+                        <TextField {...params} margin="normal" id="time-picker" />
+                      )}
                     />
                   </LocalizationProvider>
                 ) : null}
@@ -322,9 +305,9 @@ const TradeSetupForm = ({
           {isRunnable ? (
             <Grid item xs={12}>
               <Button
-                variant='contained'
-                color='secondary'
-                type='button'
+                variant="contained"
+                color="secondary"
+                type="button"
                 onClick={() => {
                   onChange({ runNow: true })
                 }}
@@ -337,34 +320,34 @@ const TradeSetupForm = ({
           <Grid item xs={12}>
             <LocalizationProvider dateAdapter={AdapterDateFns}>
               <TimePicker
-                label='Schedule run'
+                label="Schedule run"
                 value={isSchedulingDisabled ? null : state.runAt}
                 disabled={isSchedulingDisabled}
                 onChange={selectedDate => {
                   onChange({ runAt: ensureIST(selectedDate) })
                 }}
-                renderInput={(params) => <TextField {...params} margin='normal' id='time-picker' />}
+                renderInput={params => <TextField {...params} margin="normal" id="time-picker" />}
               />
             </LocalizationProvider>
           </Grid>
 
           <Grid item xs={12}>
             <Button
-              variant='contained'
-              color='primary'
-              type='button'
+              variant="contained"
+              color="primary"
+              type="button"
               onClick={handleFormSubmit}
               disabled={isSchedulingDisabled}
             >
               {isSchedulingDisabled
-                ? 'Schedule run'
-                : `Schedule for ${dayjs(state.runAt).format('hh:mma')}`}
+                ? "Schedule run"
+                : `Schedule for ${dayjs(state.runAt).format("hh:mma")}`}
             </Button>
             {!isRunnable ? (
               <Button
-                variant='contained'
-                color='inherit'
-                type='button'
+                variant="contained"
+                color="inherit"
+                type="button"
                 onClick={onCancel}
                 style={{ marginLeft: 8 }}
               >

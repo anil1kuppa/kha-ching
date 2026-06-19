@@ -1,32 +1,32 @@
-import { ATM_STRANGLE_TRADE } from '../../types/trade'
+import dayjs, { type Dayjs } from "dayjs"
+import type { KiteOrder } from "../../types/kite"
+import type { SignalXUser } from "../../types/misc"
+import type { ATM_STRANGLE_TRADE } from "../../types/trade"
 import {
-  EXPIRY_TYPE,
-  INSTRUMENTS,
+  type EXPIRY_TYPE,
   INSTRUMENT_DETAILS,
+  type INSTRUMENTS,
   PRODUCT_TYPE,
   STRANGLE_ENTRY_STRATEGIES,
-  VOLATILITY_TYPE
-} from '../constants'
-import console from '../logging'
-import { EXIT_TRADING_Q_NAME } from '../queue'
+  VOLATILITY_TYPE,
+} from "../constants"
+import { doSquareOffPositions } from "../exit-strategies/autoSquareOff"
+import { syncGetKiteInstance } from "../kiteUtils"
+import logger from "../logger"
+import { EXIT_TRADING_Q_NAME } from "../queue"
 import {
   attemptBrokerOrders,
   ensureMarginForBasketOrder,
   getExpiryTradingSymbol,
   getHedgeForStrike,
   getIndexInstruments,
-  remoteOrderSuccessEnsurer,
-  syncGetKiteInstance,
-  TradingSymbolInterface,
   getOTMStrangleByOptionPrice,
+  isMarketOpen,
+  remoteOrderSuccessEnsurer,
+  type TradingSymbolInterface,
   withRemoteRetry,
-  isMarketOpen
-} from '../utils'
-import { createOrder, getATMStraddle as getATMStrikes } from './atmStraddle'
-import { doSquareOffPositions } from '../exit-strategies/autoSquareOff'
-import dayjs, { Dayjs } from 'dayjs'
-import { KiteOrder } from '../../types/kite'
-import { SignalXUser } from '../../types/misc'
+} from "../utils"
+import { createOrder, getATMStraddle as getATMStrikes } from "./atmStraddle"
 
 export const getNearestContractDate = async (
   atmStrike: number,
@@ -38,11 +38,9 @@ export const getNearestContractDate = async (
       item =>
         item.name === nfoSymbol &&
         Number(item.strike) === atmStrike &&
-        item.instrument_type === 'PE'
+        item.instrument_type === "PE"
     )
-    .sort((row1, row2) =>
-      dayjs(row1.expiry).isSameOrBefore(dayjs(row2.expiry)) ? -1 : 1
-    )
+    .sort((row1, row2) => (dayjs(row1.expiry).isSameOrBefore(dayjs(row2.expiry)) ? -1 : 1))
 
   const [dataRow] = rows
   return dayjs(dataRow.expiry)
@@ -55,76 +53,71 @@ const getStrangleStrikes = async ({
   inverted = false,
   entryStrategy,
   distanceFromAtm = 1,
-  percentfromAtm=2,
+  percentfromAtm = 2,
   expiryType,
-  price=20
+  price = 20,
 }: {
-  user?:SignalXUser
+  user?: SignalXUser
   atmStrike: number
   instrument: INSTRUMENTS
   inverted?: boolean
   entryStrategy: STRANGLE_ENTRY_STRATEGIES
   distanceFromAtm?: number
-  percentfromAtm?:number
+  percentfromAtm?: number
   expiryType?: EXPIRY_TYPE
-  price?:number
+  price?: number
 }) => {
   const { nfoSymbol, strikeStepSize } = INSTRUMENT_DETAILS[instrument]
 
   let lowerLegPEStrike
   let higherLegCEStrike
-  if (entryStrategy === STRANGLE_ENTRY_STRATEGIES.PERCENT_FROM_ATM)
-  {
-    lowerLegPEStrike =  Math.round((1-(percentfromAtm/100))* atmStrike / strikeStepSize!) * strikeStepSize! 
-    higherLegCEStrike = Math.round((1+(percentfromAtm/100))* atmStrike / strikeStepSize!) * strikeStepSize! 
-  }
-  else if (entryStrategy === STRANGLE_ENTRY_STRATEGIES.DISTANCE_FROM_ATM)
-  {
+  if (entryStrategy === STRANGLE_ENTRY_STRATEGIES.PERCENT_FROM_ATM) {
+    lowerLegPEStrike =
+      Math.round(((1 - percentfromAtm / 100) * atmStrike) / strikeStepSize!) * strikeStepSize!
+    higherLegCEStrike =
+      Math.round(((1 + percentfromAtm / 100) * atmStrike) / strikeStepSize!) * strikeStepSize!
+  } else if (entryStrategy === STRANGLE_ENTRY_STRATEGIES.DISTANCE_FROM_ATM) {
     lowerLegPEStrike = atmStrike - distanceFromAtm * strikeStepSize
     higherLegCEStrike = atmStrike + distanceFromAtm * strikeStepSize
-  }
-  else 
-  {
-    console.log(`[strangle] symbol:${nfoSymbol} price:${price} strike:${atmStrike}`)
-    const strangleOptions=await withRemoteRetry(async () => getOTMStrangleByOptionPrice  ({
-      nfoSymbol,
-      price,
-      pivotStrike:atmStrike,
-      user:user!,
-      greaterThanEqualToPrice : false,
-      expiry :expiryType
-    }))
+  } else {
+    logger.info(`[strangle] symbol:${nfoSymbol} price:${price} strike:${atmStrike}`)
+    const strangleOptions = await withRemoteRetry(async () =>
+      getOTMStrangleByOptionPrice({
+        nfoSymbol,
+        price,
+        pivotStrike: atmStrike,
+        user: user!,
+        greaterThanEqualToPrice: false,
+        expiry: expiryType,
+      })
+    )
     /*
      tradingsymbol: tradingSymbol,
       strike: getStrike(tradingSymbol),
       instrument_token: instrumentToken,
       last_price: lastPrice
     }*/
-    return strangleOptions.reduce(( accm,currVal)=>
-      {
-        let currentVal={}
-        if (currVal.tradingsymbol.substring(currVal.tradingsymbol.length-2)==="CE")
-        {
-           currentVal= {
-            ...accm,
-            ceStrike:currVal.strike,
-            CE_STRING:currVal.tradingsymbol
-          };
+    return strangleOptions.reduce((accm, currVal) => {
+      let currentVal = {}
+      if (currVal.tradingsymbol.substring(currVal.tradingsymbol.length - 2) === "CE") {
+        currentVal = {
+          ...accm,
+          ceStrike: currVal.strike,
+          CE_STRING: currVal.tradingsymbol,
         }
-        else //if (currVal.tradingsymbol.substring(currVal.tradingsymbol-2)==="PE")
-        {
-           currentVal= {
-            ...accm,
-            peStrike:currVal.strike,
-            PE_STRING:currVal.tradingsymbol
-          };
+      } //if (currVal.tradingsymbol.substring(currVal.tradingsymbol-2)==="PE")
+      else {
+        currentVal = {
+          ...accm,
+          peStrike: currVal.strike,
+          PE_STRING: currVal.tradingsymbol,
         }
-        console.log(`[strangle] tradingSymbol is ${currVal.tradingsymbol}`)
-       return currentVal;
-      },{}
-      )
+      }
+      logger.info(`[strangle] tradingSymbol is ${currVal.tradingsymbol}`)
+      return currentVal
+    }, {})
 
-      /*peStrike,
+    /*peStrike,
       ceStrike,
       PE_STRING,
       CE_STRING
@@ -158,7 +151,7 @@ const getStrangleStrikes = async ({
           })
         )
 
-      console.log(`Price Strangle ${PE_STRING},ce STRIKE:${CE_STRING}` )
+      logger.info(`Price Strangle ${PE_STRING},ce STRIKE:${CE_STRING}`)
       return {
         peStrike: !inverted ? lowerLegPEStrike : higherLegCEStrike,
         ceStrike: !inverted ? higherLegCEStrike : lowerLegPEStrike,
@@ -183,35 +176,29 @@ const getStrangleStrikes = async ({
   const { tradingsymbol: LOWER_LEG_PE_STRING } = (await getExpiryTradingSymbol({
     nfoSymbol,
     strike: lowerLegPEStrike,
-    instrumentType: 'PE',
-    expiry: expiryType
+    instrumentType: "PE",
+    expiry: expiryType,
   })) as TradingSymbolInterface
 
-  const { tradingsymbol: HIGHER_LEG_CE_STRING } = (await getExpiryTradingSymbol(
-    {
-      nfoSymbol,
-      strike: higherLegCEStrike,
-      instrumentType: 'CE',
-      expiry: expiryType
-    }
-  )) as TradingSymbolInterface
+  const { tradingsymbol: HIGHER_LEG_CE_STRING } = (await getExpiryTradingSymbol({
+    nfoSymbol,
+    strike: higherLegCEStrike,
+    instrumentType: "CE",
+    expiry: expiryType,
+  })) as TradingSymbolInterface
 
-  const PE_STRING = !inverted
-    ? LOWER_LEG_PE_STRING
-    : HIGHER_LEG_CE_STRING.replace('CE', 'PE')
-  const CE_STRING = !inverted
-    ? HIGHER_LEG_CE_STRING
-    : LOWER_LEG_PE_STRING.replace('PE', 'CE')
+  const PE_STRING = !inverted ? LOWER_LEG_PE_STRING : HIGHER_LEG_CE_STRING.replace("CE", "PE")
+  const CE_STRING = !inverted ? HIGHER_LEG_CE_STRING : LOWER_LEG_PE_STRING.replace("PE", "CE")
 
   return {
     peStrike: !inverted ? lowerLegPEStrike : higherLegCEStrike,
     ceStrike: !inverted ? higherLegCEStrike : lowerLegPEStrike,
     PE_STRING,
-    CE_STRING
+    CE_STRING,
   }
 }
 
-async function atmStrangle (args: ATM_STRANGLE_TRADE) {
+async function atmStrangle(args: ATM_STRANGLE_TRADE) {
   try {
     const {
       instrument,
@@ -229,41 +216,29 @@ async function atmStrangle (args: ATM_STRANGLE_TRADE) {
       volatilityType = VOLATILITY_TYPE.SHORT,
       expiryType,
       _nextTradingQueue = EXIT_TRADING_Q_NAME,
-      optionPrice
+      optionPrice,
     } = args
-    const {
-      lotSize,
-      nfoSymbol,
-      strikeStepSize,
-      exchange,
-      underlyingSymbol
-    } = INSTRUMENT_DETAILS[instrument]
+    const { lotSize, nfoSymbol, strikeStepSize, exchange, underlyingSymbol } =
+      INSTRUMENT_DETAILS[instrument]
 
     const sourceData = await getIndexInstruments()
 
-    const { atmStrike,CE_STRING:atmCEString } = await getATMStrikes({
+    const { atmStrike, CE_STRING: atmCEString } = await getATMStrikes({
       ...args,
       takeTradeIrrespectiveSkew: true,
       instrumentsData: sourceData,
       startTime: dayjs(),
-      expiresAt: dayjs()
-        .subtract(1, 'seconds')
-        .format(),
+      expiresAt: dayjs().subtract(1, "seconds").format(),
       underlyingSymbol,
       exchange,
       nfoSymbol,
       strikeStepSize,
-      expiryType
+      expiryType,
     } as any)
-//If percent, get distancefromATM
+    //If percent, get distancefromATM
 
-   // const tradingPrefix=atmCEString.substring(0,atmCEString.length-(2+atmStrike.toString().length))
-    const {
-      peStrike,
-      ceStrike,
-      PE_STRING,
-      CE_STRING
-    } = await getStrangleStrikes({
+    // const tradingPrefix=atmCEString.substring(0,atmCEString.length-(2+atmStrike.toString().length))
+    const { peStrike, ceStrike, PE_STRING, CE_STRING } = await getStrangleStrikes({
       user,
       atmStrike,
       instrument,
@@ -272,13 +247,12 @@ async function atmStrangle (args: ATM_STRANGLE_TRADE) {
       percentfromAtm,
       entryStrategy,
       expiryType,
-      price:optionPrice
+      price: optionPrice,
     })
 
     const kite = syncGetKiteInstance(user)
-    if (!isMarketOpen())
-    {
-      throw new Error('Market is closed now');
+    if (!isMarketOpen()) {
+      throw new Error("Market is closed now")
     }
     let allOrdersLocal: KiteOrder[] = []
     let hedgeOrdersLocal: KiteOrder[] = []
@@ -286,8 +260,8 @@ async function atmStrangle (args: ATM_STRANGLE_TRADE) {
 
     if (volatilityType === VOLATILITY_TYPE.SHORT && isHedgeEnabled) {
       const hedges = [
-        { strike: peStrike, type: 'PE' },
-        { strike: ceStrike, type: 'CE' }
+        { strike: peStrike, type: "PE" },
+        { strike: ceStrike, type: "CE" },
       ]
       const [putHedge, callHedge] = await Promise.all(
         hedges.map(async ({ strike, type }) =>
@@ -296,20 +270,20 @@ async function atmStrangle (args: ATM_STRANGLE_TRADE) {
             distance: hedgeDistance!,
             type,
             nfoSymbol,
-            expiryType
+            expiryType,
           })
         )
       )
 
       hedgeOrdersLocal = [putHedge, callHedge].map(symbol =>
         createOrder({
-          symbol:symbol!,
+          symbol: symbol!,
           lots,
           lotSize,
           user: user!,
           orderTag: orderTag!,
           transactionType: kite.TRANSACTION_TYPE_BUY,
-          productType
+          productType,
         })
       )
       allOrdersLocal = [...hedgeOrdersLocal]
@@ -326,7 +300,7 @@ async function atmStrangle (args: ATM_STRANGLE_TRADE) {
         transactionType:
           volatilityType === VOLATILITY_TYPE.SHORT
             ? kite.TRANSACTION_TYPE_SELL
-            : kite.TRANSACTION_TYPE_BUY
+            : kite.TRANSACTION_TYPE_BUY,
       })
     )
 
@@ -334,7 +308,7 @@ async function atmStrangle (args: ATM_STRANGLE_TRADE) {
 
     const hasMargin = await ensureMarginForBasketOrder(user, allOrdersLocal)
     if (!hasMargin) {
-      throw new Error('insufficient margin')
+      throw new Error("insufficient margin")
     }
 
     if (hedgeOrdersLocal.length) {
@@ -344,29 +318,29 @@ async function atmStrangle (args: ATM_STRANGLE_TRADE) {
           orderProps: order,
           instrument,
           ensureOrderState: kite.STATUS_COMPLETE,
-          user: user!
+          user: user!,
         })
       )
 
       const { allOk, statefulOrders } = await attemptBrokerOrders(hedgeOrdersPr)
       if (!allOk && rollback?.onBrokenHedgeOrders) {
         await doSquareOffPositions(statefulOrders, kite, {
-          orderTag
+          orderTag,
         })
 
-        throw Error('rolled back onBrokenHedgeOrders')
+        throw Error("rolled back onBrokenHedgeOrders")
       }
 
       allOrders = [...statefulOrders]
     }
-    
+
     const brokerOrdersPr = orders.map(async order =>
       remoteOrderSuccessEnsurer({
         _kite: kite,
         orderProps: order,
         instrument,
         ensureOrderState: kite.STATUS_COMPLETE,
-        user: user!
+        user: user!,
       })
     )
 
@@ -374,19 +348,19 @@ async function atmStrangle (args: ATM_STRANGLE_TRADE) {
     allOrders = [...allOrders, ...statefulOrders]
     if (!allOk && rollback?.onBrokenPrimaryOrders) {
       await doSquareOffPositions(allOrders, kite, {
-        orderTag
+        orderTag,
       })
 
-      throw Error('rolled back on onBrokenPrimaryOrders')
+      throw Error("rolled back on onBrokenPrimaryOrders")
     }
 
     return {
       _nextTradingQueue,
       rawKiteOrdersResponse: statefulOrders,
-      squareOffOrders: allOrders
+      squareOffOrders: allOrders,
     }
   } catch (e) {
-    console.log('🔴 strangle orders failed!', e)
+    logger.error("🔴 strangle orders failed!", e)
     throw e
   }
 }

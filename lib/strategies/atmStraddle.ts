@@ -1,18 +1,19 @@
-import dayjs, { ConfigType } from 'dayjs'
-import { KiteOrder } from '../../types/kite'
-import { SignalXUser } from '../../types/misc'
-import { ATM_STRADDLE_TRADE } from '../../types/trade'
-
+import dayjs, { type ConfigType } from "dayjs"
+import isSameOrBefore from "dayjs/plugin/isSameOrBefore"
+import type { KiteOrder } from "../../types/kite"
+import type { SignalXUser } from "../../types/misc"
+import type { ATM_STRADDLE_TRADE } from "../../types/trade"
 import {
   EXPIRY_TYPE,
   INSTRUMENT_DETAILS,
-  INSTRUMENT_PROPERTIES,
+  type INSTRUMENT_PROPERTIES,
   PRODUCT_TYPE,
-  VOLATILITY_TYPE
-} from '../constants'
-import { doSquareOffPositions } from '../exit-strategies/autoSquareOff'
-import console from '../logging'
-import { EXIT_TRADING_Q_NAME } from '../queue'
+  VOLATILITY_TYPE,
+} from "../constants"
+import { doSquareOffPositions } from "../exit-strategies/autoSquareOff"
+import { syncGetKiteInstance } from "../kiteUtils"
+import logger from "../logger"
+import { EXIT_TRADING_Q_NAME } from "../queue"
 import {
   attemptBrokerOrders,
   delay,
@@ -24,29 +25,23 @@ import {
   getSkew,
   ms,
   remoteOrderSuccessEnsurer,
-  StrikeInterface,
-  syncGetKiteInstance,
-  withRemoteRetry
-} from '../utils'
-import isSameOrBefore from 'dayjs/plugin/isSameOrBefore'
+  type StrikeInterface,
+  withRemoteRetry,
+} from "../utils"
 
 dayjs.extend(isSameOrBefore)
 
-interface GET_ATM_STRADDLE_ARGS
-  extends ATM_STRADDLE_TRADE,
-    INSTRUMENT_PROPERTIES {
+interface GET_ATM_STRADDLE_ARGS extends ATM_STRADDLE_TRADE, INSTRUMENT_PROPERTIES {
   startTime: ConfigType
   attempt?: number
   instrumentsData: Record<string, unknown>[]
 }
 
-export async function getATMStraddle (
-  args: Partial<GET_ATM_STRADDLE_ARGS>
-): Promise<{
+export async function getATMStraddle(args: Partial<GET_ATM_STRADDLE_ARGS>): Promise<{
   PE_STRING: string
   CE_STRING: string
-  atmStrike: number,
-  LOT_SIZE:number
+  atmStrike: number
+  LOT_SIZE: number
 }> {
   const {
     _kite,
@@ -61,7 +56,7 @@ export async function getATMStraddle (
     takeTradeIrrespectiveSkew,
     expiresAt,
     expiryType,
-    attempt = 0
+    attempt = 0,
   } = args
   try {
     /**
@@ -80,7 +75,7 @@ export async function getATMStraddle (
      * and then eventually if the timer expires, then decide basis `takeTradeIrrespectiveSkew`
      */
 
-    const kite = _kite || syncGetKiteInstance(user)
+    const kite = (_kite as any) || syncGetKiteInstance(user)
     const totalTime = dayjs(expiresAt).diff(startTime!)
     const remainingTime = dayjs(expiresAt).diff(dayjs())
     const timeExpired = dayjs().isAfter(dayjs(expiresAt))
@@ -98,18 +93,17 @@ export async function getATMStraddle (
     const underlyingLTP = await withRemoteRetry(async () =>
       getInstrumentPrice(kite, underlyingSymbol!, exchange!)
     )
-    const atmStrike =
-      Math.round(underlyingLTP / strikeStepSize!) * strikeStepSize!
+    const atmStrike = Math.round(underlyingLTP / strikeStepSize!) * strikeStepSize!
 
-    const { PE_STRING, CE_STRING,LOT_SIZE} = (await getExpiryTradingSymbol({
+    const { PE_STRING, CE_STRING, LOT_SIZE } = (await getExpiryTradingSymbol({
       nfoSymbol,
       strike: atmStrike,
-      expiry: expiryType
+      expiry: expiryType,
     })) as StrikeInterface
-    console.log(`Expiry ${expiryType} strikes: ${PE_STRING} & ${CE_STRING}`)
+    logger.info(`Expiry ${expiryType} strikes: ${PE_STRING} & ${CE_STRING}`)
     // if time has expired
     if (timeExpired) {
-      console.log(
+      logger.info(
         `🔔 [atmStraddle] time has run out! takeTradeIrrespectiveSkew = ${takeTradeIrrespectiveSkew!.toString()}`
       )
       if (takeTradeIrrespectiveSkew) {
@@ -117,26 +111,21 @@ export async function getATMStraddle (
           PE_STRING,
           CE_STRING,
           atmStrike,
-          LOT_SIZE
+          LOT_SIZE,
         }
       }
 
       return Promise.reject(
-        new Error(
-          '[atmStraddle] time expired and takeTradeIrrespectiveSkew is false'
-        )
+        new Error("[atmStraddle] time expired and takeTradeIrrespectiveSkew is false")
       )
     }
 
     // if time hasn't expired
-    const { skew } = await withRemoteRetry(async () =>
-      getSkew(kite, PE_STRING, CE_STRING, 'NFO')
-    )
+    const { skew } = await withRemoteRetry(async () => getSkew(kite, PE_STRING, CE_STRING, "NFO"))
     // if skew not fitting in, try again
     if (skew > updatedSkewPercent!) {
-      console.log(
-        `Retry #${attempt +
-          1}... Live skew (${skew as string}%) > Skew consideration (${String(
+      logger.info(
+        `Retry #${attempt + 1}... Live skew (${skew as string}%) > Skew consideration (${String(
           updatedSkewPercent
         )}%)`
       )
@@ -144,7 +133,7 @@ export async function getATMStraddle (
       return getATMStraddle({ ...args, attempt: attempt + 1 })
     }
 
-    console.log(
+    logger.info(
       `[atmStraddle] punching with current skew ${String(
         skew
       )}%, and last skew threshold was ${String(updatedSkewPercent)}`
@@ -155,11 +144,11 @@ export async function getATMStraddle (
       PE_STRING,
       CE_STRING,
       atmStrike,
-      LOT_SIZE
+      LOT_SIZE,
     }
   } catch (e) {
-    console.log('[getATMStraddle] exception', e)
-    if (e?.error_type === 'NetworkException') {
+    logger.error("[getATMStraddle] exception", e)
+    if (e?.error_type === "NetworkException") {
       return getATMStraddle({ ...args, attempt: attempt + 1 })
     }
     return Promise.reject(e)
@@ -173,14 +162,14 @@ export const createOrder = ({
   user,
   orderTag,
   transactionType,
-  productType
+  productType,
 }: {
   symbol: string
   lots: number
   lotSize: number
   user: SignalXUser
   orderTag: string
-  transactionType?: string
+  transactionType?: "BUY" | "SELL"
   productType: PRODUCT_TYPE
 }): KiteOrder => {
   const kite = syncGetKiteInstance(user)
@@ -192,11 +181,11 @@ export const createOrder = ({
     order_type: kite.ORDER_TYPE_MARKET,
     product: productType,
     validity: kite.VALIDITY_DAY,
-    tag: orderTag
+    tag: orderTag,
   }
 }
 
-async function atmStraddle ({
+async function atmStraddle({
   _kite,
   instrument,
   lots,
@@ -214,25 +203,20 @@ async function atmStraddle ({
   productType = PRODUCT_TYPE.MIS,
   volatilityType = VOLATILITY_TYPE.SHORT,
   expiryType = EXPIRY_TYPE.CURRENT,
-  _nextTradingQueue = EXIT_TRADING_Q_NAME
+  _nextTradingQueue = EXIT_TRADING_Q_NAME,
 }: ATM_STRADDLE_TRADE): Promise<
   | {
       _nextTradingQueue: string
-      straddle: Record<string, unknown>,
-      isTargetEnabled: boolean,
+      straddle: Record<string, unknown>
+      isTargetEnabled: boolean
       rawKiteOrdersResponse: KiteOrder[]
       squareOffOrders: KiteOrder[]
     }
   | undefined
 > {
-  const kite = _kite || syncGetKiteInstance(user)
+  const kite = (_kite as any) || syncGetKiteInstance(user)
 
-  const {
-    underlyingSymbol,
-    exchange,
-    nfoSymbol,
-    strikeStepSize
-  } = INSTRUMENT_DETAILS[instrument]
+  const { underlyingSymbol, exchange, nfoSymbol, strikeStepSize } = INSTRUMENT_DETAILS[instrument]
 
   const instrumentsData = await getIndexInstruments()
 
@@ -250,10 +234,10 @@ async function atmStraddle ({
       thresholdSkewPercent,
       takeTradeIrrespectiveSkew,
       expiresAt,
-      expiryType
+      expiryType,
     })
 
-    const { PE_STRING, CE_STRING, atmStrike,LOT_SIZE } = straddle
+    const { PE_STRING, CE_STRING, atmStrike, LOT_SIZE } = straddle
 
     let allOrdersLocal: KiteOrder[] = []
     let hedgeOrdersLocal: KiteOrder[] = []
@@ -261,25 +245,25 @@ async function atmStraddle ({
 
     if (volatilityType === VOLATILITY_TYPE.SHORT && isHedgeEnabled) {
       const [putHedge, callHedge] = await Promise.all(
-        ['PE', 'CE'].map(async type =>
+        ["PE", "CE"].map(async type =>
           getHedgeForStrike({
             strike: atmStrike,
             distance: hedgeDistance!,
             type,
             nfoSymbol,
-            expiryType
+            expiryType,
           })
         )
       )
       hedgeOrdersLocal = [putHedge, callHedge].map(symbol =>
         createOrder({
-          symbol:symbol!,
+          symbol: symbol!,
           lots,
-          lotSize:LOT_SIZE,
+          lotSize: LOT_SIZE,
           user: user!,
           orderTag: orderTag!,
           transactionType: kite.TRANSACTION_TYPE_BUY,
-          productType
+          productType,
         })
       )
       allOrdersLocal = [...hedgeOrdersLocal]
@@ -289,14 +273,14 @@ async function atmStraddle ({
       createOrder({
         symbol,
         lots,
-        lotSize:LOT_SIZE,
+        lotSize: LOT_SIZE,
         user: user!,
         orderTag: orderTag!,
         productType,
         transactionType:
           volatilityType === VOLATILITY_TYPE.SHORT
             ? kite.TRANSACTION_TYPE_SELL
-            : kite.TRANSACTION_TYPE_BUY
+            : kite.TRANSACTION_TYPE_BUY,
       })
     )
 
@@ -306,7 +290,7 @@ async function atmStraddle ({
       ensureMarginForBasketOrder(user, allOrdersLocal)
     )
     if (!hasMargin) {
-      throw Error('insufficient margin!')
+      throw Error("insufficient margin!")
     }
 
     if (hedgeOrdersLocal.length) {
@@ -316,17 +300,17 @@ async function atmStraddle ({
           orderProps: order,
           instrument,
           ensureOrderState: kite.STATUS_COMPLETE,
-          user: user!
+          user: user!,
         })
       )
 
       const { allOk, statefulOrders } = await attemptBrokerOrders(hedgeOrdersPr)
       if (!allOk && rollback?.onBrokenHedgeOrders) {
         await doSquareOffPositions(statefulOrders, kite, {
-          orderTag
+          orderTag,
         })
 
-        throw Error('rolled back onBrokenHedgeOrders')
+        throw Error("rolled back onBrokenHedgeOrders")
       }
 
       allOrders = [...statefulOrders]
@@ -338,7 +322,7 @@ async function atmStraddle ({
         orderProps: order,
         instrument,
         ensureOrderState: kite.STATUS_COMPLETE,
-        user: user!
+        user: user!,
       })
     )
 
@@ -346,21 +330,21 @@ async function atmStraddle ({
     allOrders = [...allOrders, ...statefulOrders]
     if (!allOk && rollback?.onBrokenPrimaryOrders) {
       await doSquareOffPositions(allOrders, kite, {
-        orderTag
+        orderTag,
       })
 
-      throw Error('rolled back on onBrokenPrimaryOrders')
+      throw Error("rolled back on onBrokenPrimaryOrders")
     }
 
     return {
       _nextTradingQueue,
       straddle,
-      isTargetEnabled:isMaxLossEnabled||isMaxProfitEnabled ,
+      isTargetEnabled: isMaxLossEnabled || isMaxProfitEnabled,
       rawKiteOrdersResponse: statefulOrders,
-      squareOffOrders: allOrders
+      squareOffOrders: allOrders,
     }
-    } catch (e) {
-    console.log(e)
+  } catch (e) {
+    logger.error("atmStraddle error", e)
     throw e
   }
 }

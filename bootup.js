@@ -1,24 +1,24 @@
-const http = require('http')
+const http = require("http")
 
 const options = {
-  host: 'localhost',
-  port: '8080',
-  path: '/api/user',
-  timeout: 5000
+  host: "localhost",
+  port: "8080",
+  path: "/api/user",
+  timeout: 5000,
 }
 
 setTimeout(() => {
   const request = http.request(options, res => {
     console.log(`STATUS: ${res.statusCode}`)
-    if (res.statusCode == 200) {
+    if (res.statusCode === 200) {
       process.exit(0)
     } else {
       process.exit(1)
     }
   })
 
-  request.on('error', function (err) {
-    console.log('ERROR')
+  request.on("error", function (err) {
+    console.log("ERROR")
     process.exit(1)
   })
 

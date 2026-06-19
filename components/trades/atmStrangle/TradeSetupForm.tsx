@@ -10,15 +10,15 @@ import {
   Radio,
   RadioGroup,
   TextField,
-  Typography
-} from '@mui/material'
-import { TimePicker } from '@mui/x-date-pickers/TimePicker'
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns'
-import dayjs from 'dayjs'
-import React from 'react'
+  Typography,
+} from "@mui/material"
+import { TimePicker } from "@mui/x-date-pickers/TimePicker"
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider"
+import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns"
+import dayjs from "dayjs"
+import React from "react"
 
-import { ensureIST, formatFormDataForApi } from '../../../lib/browserUtils'
+import { ensureIST, formatFormDataForApi } from "../../../lib/browserUtils"
 import {
   EXIT_STRATEGIES,
   INSTRUMENT_DETAILS,
@@ -26,16 +26,16 @@ import {
   STRATEGIES,
   STRANGLE_ENTRY_STRATEGIES,
   STRATEGIES_DETAILS,
-  ENTRY_ORDER
-} from '../../../lib/constants'
-import { ATM_STRANGLE_CONFIG, AvailablePlansConfig } from '../../../types/plans'
-import HedgeComponent from '../../lib/HedgeComponent'
-import VolatilityTypeComponent from '../../lib/VolatilityTypeComponent'
-import ProductTypeComponent from '../../lib/ProductTypeComponent'
-import RollbackComponent from '../../lib/RollbackComponent'
-import DiscreteSlider from '../../lib/Slider'
-import SlManagerComponent from '../../lib/SlManagerComponent'
-import ExpiryTypeComponent from '../../lib/ExpiryTypeComponent'
+  ENTRY_ORDER,
+} from "../../../lib/constants"
+import { ATM_STRANGLE_CONFIG, AvailablePlansConfig } from "../../../types/plans"
+import HedgeComponent from "../../lib/HedgeComponent"
+import VolatilityTypeComponent from "../../lib/VolatilityTypeComponent"
+import ProductTypeComponent from "../../lib/ProductTypeComponent"
+import RollbackComponent from "../../lib/RollbackComponent"
+import DiscreteSlider from "../../lib/Slider"
+import SlManagerComponent from "../../lib/SlManagerComponent"
+import ExpiryTypeComponent from "../../lib/ExpiryTypeComponent"
 
 interface ATMStrangleTradeSetupFormProps {
   formHeading?: string
@@ -54,55 +54,48 @@ const TradeSetupForm = ({
   onChange,
   onSubmit,
   onCancel,
-  isRunnable = true
+  isRunnable = true,
 }: ATMStrangleTradeSetupFormProps) => {
   const isSchedulingDisabled = false
 
-  const enabledInstruments = [
-    INSTRUMENTS.NIFTY,
-    INSTRUMENTS.BANKNIFTY,
-    INSTRUMENTS.FINNIFTY
-  ]
+  const enabledInstruments = [INSTRUMENTS.NIFTY, INSTRUMENTS.BANKNIFTY, INSTRUMENTS.FINNIFTY]
   const entryStrategies = [
     STRANGLE_ENTRY_STRATEGIES.DISTANCE_FROM_ATM,
     STRANGLE_ENTRY_STRATEGIES.PERCENT_FROM_ATM,
-    STRANGLE_ENTRY_STRATEGIES.ENTRY_PRICE
+    STRANGLE_ENTRY_STRATEGIES.ENTRY_PRICE,
   ]
-  const orderTypes=[
-    ENTRY_ORDER.MARKET_ORDER,
-    ENTRY_ORDER.STOP_LOSS_MARKET_ORDER
-  ]
+  const orderTypes = [ENTRY_ORDER.MARKET_ORDER, ENTRY_ORDER.STOP_LOSS_MARKET_ORDER]
   const exitStrategies = [
     EXIT_STRATEGIES.INDIVIDUAL_LEG_SLM_1X,
     EXIT_STRATEGIES.MULTI_LEG_PREMIUM_THRESHOLD,
-    EXIT_STRATEGIES.NO_SL
+    EXIT_STRATEGIES.NO_SL,
   ]
 
   const handleFormSubmit = e => {
     e.preventDefault()
     onSubmit(formatFormDataForApi({ strategy, data: state }))
   }
-  
+
   return (
     <form noValidate>
       <Paper style={{ padding: 16 }}>
-        <Typography variant='h6' style={{ marginBottom: 16 }}>
-          {formHeading ?? 'Setup new trade'}
+        <Typography variant="h6" style={{ marginBottom: 16 }}>
+          {formHeading ?? "Setup new trade"}
         </Typography>
-        <Grid container alignItems='flex-start' spacing={2}>
-        <Grid item xs={12}>
+        <Grid container alignItems="flex-start" spacing={2}>
+          <Grid item xs={12}>
             <TextField
               fullWidth
-              name='name'
+              name="name"
               value={state.name}
               onChange={e => onChange({ name: e.target.value || undefined })}
-              label='Name of trade '
+              label="Name of trade "
             />
-         </Grid>
-      
+          </Grid>
+
           <Grid item xs={12}>
-            <FormControl component='fieldset'>
-              <FormLabel component='legend'>Instruments</FormLabel>
+            <FormControl component="fieldset">
+              <FormLabel component="legend">Instruments</FormLabel>
               <FormGroup row>
                 {enabledInstruments.map(instrument => (
                   <FormControlLabel
@@ -110,14 +103,14 @@ const TradeSetupForm = ({
                     label={INSTRUMENT_DETAILS[instrument].displayName}
                     control={
                       <Checkbox
-                        name='instruments'
+                        name="instruments"
                         disabled={state.disableInstrumentChange}
                         checked={state.instruments[instrument]}
                         onChange={() => {
                           onChange({
                             instruments: {
-                              [instrument]: !state.instruments[instrument]
-                            } as Record<INSTRUMENTS, boolean>
+                              [instrument]: !state.instruments[instrument],
+                            } as Record<INSTRUMENTS, boolean>,
                           })
                         }}
                       />
@@ -135,15 +128,15 @@ const TradeSetupForm = ({
           <ExpiryTypeComponent state={state} onChange={onChange} />
 
           <Grid item xs={12}>
-            <FormControl component='fieldset'>
-              <FormLabel component='legend'>Entry strategy</FormLabel>
+            <FormControl component="fieldset">
+              <FormLabel component="legend">Entry strategy</FormLabel>
               <RadioGroup
-                aria-label='entryStrategy'
-                name='entryStrategy'
+                aria-label="entryStrategy"
+                name="entryStrategy"
                 value={state.entryStrategy}
                 onChange={e =>
                   onChange({
-                    entryStrategy: e.target.value as STRANGLE_ENTRY_STRATEGIES
+                    entryStrategy: e.target.value as STRANGLE_ENTRY_STRATEGIES,
                   })
                 }
               >
@@ -151,12 +144,13 @@ const TradeSetupForm = ({
                   <FormControlLabel
                     key={entryStrategy}
                     value={entryStrategy}
-                    control={<Radio size='small' />}
+                    control={<Radio size="small" />}
                     label={
-                      <Typography variant='body2'>
+                      <Typography variant="body2">
                         {
-                          STRATEGIES_DETAILS[STRATEGIES.ATM_STRANGLE]
-                            .ENTRY_STRATEGY_DETAILS[entryStrategy].label
+                          STRATEGIES_DETAILS[STRATEGIES.ATM_STRANGLE].ENTRY_STRATEGY_DETAILS[
+                            entryStrategy
+                          ].label
                         }
                       </Typography>
                     }
@@ -167,69 +161,57 @@ const TradeSetupForm = ({
           </Grid>
 
           <Grid item>
-            {state.entryStrategy ===
-            STRANGLE_ENTRY_STRATEGIES.DISTANCE_FROM_ATM ? (
+            {state.entryStrategy === STRANGLE_ENTRY_STRATEGIES.DISTANCE_FROM_ATM ? (
               <DiscreteSlider
-                label={'Strikes away from ATM strike'}
+                label={"Strikes away from ATM strike"}
                 defaultValue={1}
                 step={1}
                 min={1}
                 max={20}
                 value={state.distanceFromAtm}
-                onChange={(e, newValue) =>
-                  onChange({ distanceFromAtm: newValue })
-                }
+                onChange={(e, newValue) => onChange({ distanceFromAtm: newValue })}
               />
-            ) :state.entryStrategy ===
-            STRANGLE_ENTRY_STRATEGIES.PERCENT_FROM_ATM?
-            ( <TextField
-              fullWidth
-              name='percentStrikes'
-              value={state.percentfromAtm}
-              defaultValue={2}
-              onChange={(e) =>
-                onChange({ percentfromAtm:  +e.target.value || undefined })
-              }
-              label='Percent from ATM%'
-            />
-            ):   ( <TextField
-              fullWidth
-              name='optionPrice'
-              value={state.optionPrice}
-              defaultValue={20}
-              onChange={(e) =>
-                onChange({ optionPrice:  +e.target.value || undefined })
-              }
-              label='Option Price'
-            />
-            )
-            }
+            ) : state.entryStrategy === STRANGLE_ENTRY_STRATEGIES.PERCENT_FROM_ATM ? (
+              <TextField
+                fullWidth
+                name="percentStrikes"
+                value={state.percentfromAtm}
+                defaultValue={2}
+                onChange={e => onChange({ percentfromAtm: +e.target.value || undefined })}
+                label="Percent from ATM%"
+              />
+            ) : (
+              <TextField
+                fullWidth
+                name="optionPrice"
+                value={state.optionPrice}
+                defaultValue={20}
+                onChange={e => onChange({ optionPrice: +e.target.value || undefined })}
+                label="Option Price"
+              />
+            )}
           </Grid>
 
           <Grid item xs={12} style={{ marginBottom: 8 }}>
             <TextField
               fullWidth
-              name='lots'
+              name="lots"
               value={state.lots}
               onChange={e => onChange({ lots: +e.target.value || undefined })}
-              label='# Lots'
+              label="# Lots"
             />
           </Grid>
 
-          <SlManagerComponent
-            state={state}
-            onChange={onChange}
-            exitStrategies={exitStrategies}
-          />
+          <SlManagerComponent state={state} onChange={onChange} exitStrategies={exitStrategies} />
 
           <Grid item xs={12}>
-            <FormControl component='fieldset'>
+            <FormControl component="fieldset">
               <FormGroup row>
                 <FormControlLabel
-                  label='Inverted Strangle'
+                  label="Inverted Strangle"
                   control={
                     <Checkbox
-                      name='instruments'
+                      name="instruments"
                       checked={state.inverted}
                       onChange={() => onChange({ inverted: !state.inverted })}
                     />
@@ -247,17 +229,17 @@ const TradeSetupForm = ({
           />
 
           <Grid item xs={12}>
-            <FormControl component='fieldset'>
+            <FormControl component="fieldset">
               <FormGroup>
                 <FormControlLabel
-                  key='autoSquareOff'
-                  label='Auto Square off'
+                  key="autoSquareOff"
+                  label="Auto Square off"
                   control={
                     <Checkbox
                       checked={state.isAutoSquareOffEnabled}
                       onChange={() =>
                         onChange({
-                          isAutoSquareOffEnabled: !state.isAutoSquareOffEnabled
+                          isAutoSquareOffEnabled: !state.isAutoSquareOffEnabled,
                         })
                       }
                     />
@@ -266,12 +248,14 @@ const TradeSetupForm = ({
                 {state.isAutoSquareOffEnabled ? (
                   <LocalizationProvider dateAdapter={AdapterDateFns}>
                     <TimePicker
-                      label='Square off time'
+                      label="Square off time"
                       value={state.squareOffTime}
                       onChange={selectedDate => {
                         onChange({ squareOffTime: ensureIST(selectedDate) })
                       }}
-                      renderInput={(params) => <TextField {...params} margin='normal' id='time-picker' />}
+                      renderInput={params => (
+                        <TextField {...params} margin="normal" id="time-picker" />
+                      )}
                     />
                   </LocalizationProvider>
                 ) : null}
@@ -284,9 +268,9 @@ const TradeSetupForm = ({
           {isRunnable ? (
             <Grid item xs={12}>
               <Button
-                variant='contained'
-                color='secondary'
-                type='button'
+                variant="contained"
+                color="secondary"
+                type="button"
                 onClick={e => {
                   onChange({ runNow: true })
                 }}
@@ -299,34 +283,34 @@ const TradeSetupForm = ({
           <Grid item xs={12}>
             <LocalizationProvider dateAdapter={AdapterDateFns}>
               <TimePicker
-                label='Schedule run'
+                label="Schedule run"
                 value={isSchedulingDisabled ? null : state.runAt}
                 disabled={isSchedulingDisabled}
                 onChange={selectedDate => {
                   onChange({ runAt: ensureIST(selectedDate) })
                 }}
-                renderInput={(params) => <TextField {...params} margin='normal' id='time-picker' />}
+                renderInput={params => <TextField {...params} margin="normal" id="time-picker" />}
               />
             </LocalizationProvider>
           </Grid>
 
           <Grid item xs={12}>
             <Button
-              variant='contained'
-              color='primary'
-              type='button'
+              variant="contained"
+              color="primary"
+              type="button"
               onClick={handleFormSubmit}
               disabled={isSchedulingDisabled}
             >
               {isSchedulingDisabled
-                ? 'Schedule run'
-                : `Schedule for ${dayjs(state.runAt).format('hh:mma')}`}
+                ? "Schedule run"
+                : `Schedule for ${dayjs(state.runAt).format("hh:mma")}`}
             </Button>
             {!isRunnable ? (
               <Button
-                variant='contained'
-                color='inherit'
-                type='button'
+                variant="contained"
+                color="inherit"
+                type="button"
                 onClick={onCancel}
                 style={{ marginLeft: 8 }}
               >

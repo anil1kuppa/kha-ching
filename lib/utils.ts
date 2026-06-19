@@ -1,44 +1,64 @@
-import axios from 'axios'
-import csv from 'csvtojson'
-import dayjs, { Dayjs } from 'dayjs'
-import { KiteConnect } from 'kiteconnect'
-import Bluebird, { any, Promise } from 'bluebird'
-import { allSettled, allSettledInterface } from './es6-promise'
-import { redisConnection,QID } from './queue'
-
+import axios from "axios"
+import type Bluebird from "bluebird"
+import { any, Promise } from "bluebird"
+import dayjs, { type Dayjs } from "dayjs"
+import { eq } from "drizzle-orm"
+import type { Instrument, Order } from "kiteconnect"
+import { KiteConnect } from "kiteconnect"
+import type { KiteOrder } from "../types/kite"
+import type { SignalXUser } from "../types/misc"
+import { SUPPORTED_TRADE_CONFIG } from "../types/trade"
 import {
+  ACCESSTOKEN,
+  COMPLETED_BY_TAG,
   ERROR_STRINGS,
   EXIT_STRATEGIES,
   EXPIRY_TYPE,
-  INSTRUMENTS,
   INSTRUMENT_DETAILS,
-  KITE_INSTRUMENT_INFO,
-  STRATEGIES,
+  type INSTRUMENTS,
+  TRADES,
   USER_OVERRIDE,
-  COMPLETED_BY_TAG,
-  ACCESSTOKEN,
-  TRADES
-} from './constants'
-// const redisClient = require('redis').createClient(process.env.REDIS_URL);
-// export const memoizer = require('redis-memoizer')(redisClient);
-import { COMPLETED_ORDER_RESPONSE } from './strategies/mockData/orderResponse'
-import { SignalXUser } from '../types/misc'
-import { KiteOrder } from '../types/kite'
-import {SUPPORTED_TRADE_CONFIG} from '../types/trade'
+} from "./constants"
+import { db } from "./drizzle"
+// This function has been moved to Drizzle-backed utilities to use the job_executions table
+import {
+  getLatestAccessToken,
+  patchDbTrade as patchDbTradeFromDb,
+  storeAccessToken,
+} from "./drizzleDbUtils"
+import { allSettled, type allSettledInterface } from "./es6-promise"
+import {
+  getIndexInstruments,
+  getFnOExpiries,
+  getNiftyOptionExpiries,
+  getCompletedOrdersbyTag as getCompletedOrdersbyTagFromKite,
+  getMultipleInstrumentPrices,
+  placeOrder as kitePlaceOrder,
+  orderBasketMargins,
+  type PlaceOrderParams,
+  syncGetKiteInstance,
+} from "./kiteUtils"
+import logger from "./logger"
+import { jobExecutions } from "./schema"
+import { COMPLETED_ORDER_RESPONSE } from "./strategies/mockData/orderResponse"
 
 Promise.config({ cancellation: true, warnings: true })
-import isSameOrBefore from 'dayjs/plugin/isSameOrBefore'
 
+import isSameOrBefore from "dayjs/plugin/isSameOrBefore"
+import timezone from "dayjs/plugin/timezone"
+import utc from "dayjs/plugin/utc"
+
+dayjs.extend(utc)
+dayjs.extend(timezone)
 dayjs.extend(isSameOrBefore)
-import https from 'https'
-import fs from 'fs'
-import memoizer from 'memoizee'
 
-export type TradingSymbolInterface = KITE_INSTRUMENT_INFO
+
+
+export type TradingSymbolInterface = Instrument
 export interface StrikeInterface {
   PE_STRING: string
-  CE_STRING: string,
-  LOT_SIZE:number
+  CE_STRING: string
+  LOT_SIZE: number
 }
 
 interface GET_LTP_ARGS {
@@ -51,101 +71,57 @@ export interface GET_LTP_RESPONSE extends GET_LTP_ARGS {
   lastPrice: number
 }
 
-const MOCK_ORDERS = process.env.MOCK_ORDERS
-  ? JSON.parse(process.env.MOCK_ORDERS)
-  : false
+const MOCK_ORDERS = process.env.MOCK_ORDERS ? JSON.parse(process.env.MOCK_ORDERS) : false
 const KITE_API_KEY = process.env.KITE_API_KEY
-const ORCL_HOST_URL=process.env.ORCL_HOST_URL
-const SUPABASE_URL=process.env.SUPABASE_URL
+const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL ?? ""
 
-export const logDeep = object => console.log(JSON.stringify(object, null, 2))
+/**
+ * Log an object as pretty JSON at info level.
+ * @param object - anything to log
+ */
+export const logDeep = object => logger.info(JSON.stringify(object, null, 2))
 
+/**
+ * Convert seconds to milliseconds.
+ * @param seconds - seconds to convert
+ * @returns milliseconds
+ */
 export const ms = seconds => seconds * 1000
 
-const asyncGetIndexInstruments = (
-  exchange = 'NFO'
-): Promise<KITE_INSTRUMENT_INFO[]> =>
-  new Promise((resolve, reject) => {
-    const filename = `instrument_${new Date().getTime()}.csv`
-    const file = fs.createWriteStream(filename)
-    console.log('downloading instruments file...')
-    https.get(`https://api.kite.trade/instruments/${exchange}`, function (
-      response
-    ) {
-      const stream = response.pipe(file)
-      stream.on('finish', async () => {
-        try {
-          const jsonArray = await csv().fromFile(filename)
-          // sometimes 0d returns 200 status code but 502 gateway error in file
-          if (Object.keys(jsonArray[0]).length === 12) {
-            fs.unlink(filename, e => {
-              console.log(e)
-            })
-            const indexesData =
-              exchange === 'NFO'
-                ? jsonArray.filter(
-                    item =>
-                      item.name === 'NIFTY' ||
-                      item.name === 'BANKNIFTY' ||
-                      item.name === 'FINNIFTY'
-                  )
-                : jsonArray
-
-            return resolve(indexesData)
-          }
-          // retry if that's the case
-          fs.unlink(filename, e => {
-            console.log(e)
-          })
-          console.log('🔴 Failed downloading instruments file! Retrying...')
-          // resolve this promise with a recursive promise fn call
-          resolve(asyncGetIndexInstruments())
-        } catch (e) {
-          console.log('💀 Errored downloading instruments file!', e)
-          reject(e)
-        }
-      })
-    })
-  })
-
-export const getIndexInstruments = memoizer(asyncGetIndexInstruments, {
-  maxAge: dayjs().get('hours') >= 8 ? ms(9 * 60 * 60) : ms(5 * 60),
-  promise: true
-})
-
-
-const getOptionExpiries = async (
-  nfoSymbol='NIFTY', //NIFTY,BANKNIFTY,FINNIFTY
-  instrumentType='CE' //CE,PE,FUT
-): Promise<string[]> => {
-  console.log(`[utils.getOptionExpiries] nfoSymbol:${nfoSymbol};instrumentType=${instrumentType} `)
-  const instrumentsData = await getIndexInstruments()
-
-  const rows: KITE_INSTRUMENT_INFO[] = instrumentsData
-    .filter(
-      item =>
-        (nfoSymbol ? item.name === nfoSymbol : true) &&
-        (instrumentType ? item.instrument_type === instrumentType : true)
-    )
-    .sort((row1, row2) =>
-      dayjs(row1.expiry).isSameOrBefore(dayjs(row2.expiry)) ? -1 : 1
-    );
-    const expiryDateSet = new Set();
-    for (const row of rows )
-    {
-      expiryDateSet.add((row.expiry));
-      if (expiryDateSet.size==20)
-         break;
-    
-    }
-    return Array.from(expiryDateSet) as string[];
-
+/**
+ * Convert a date value to IST by adding the +5:30 offset in milliseconds.
+ * @param value - dayjs object, Date, or timestamp string
+ */
+export const toIst = (value: dayjs.Dayjs | Date | string): dayjs.Dayjs => {
+  return dayjs(value).tz("Asia/Kolkata")
 }
-export const getNiftyOptionExpiries = memoizer(getOptionExpiries, {
-  maxAge: dayjs().get('hours') >= 8 ? ms(9 * 60 * 60) : ms(5 * 60),
-  promise: true
-})
 
+/**
+ * Post a simple text message to configured Slack Incoming Webhook URL.
+ * Uses `axios` for HTTP requests and `logger` for structured logs.
+ */
+export async function postToSlack(message: string): Promise<void> {
+  if (!SLACK_WEBHOOK_URL) {
+    logger.warn("[postToSlack] SLACK_WEBHOOK_URL not configured")
+    return
+  }
+
+  try {
+    await axios.post(
+      SLACK_WEBHOOK_URL,
+      { text: message },
+      { headers: { "Content-Type": "application/json" } }
+    )
+    logger.info("[postToSlack] Message posted to Slack successfully")
+  } catch (error) {
+    logger.error("[postToSlack] Error posting message to Slack", error)
+  }
+}
+
+/**
+ * Promise-based delay for async flows.
+ * @param ms - milliseconds to wait
+ */
 export const delay = ms =>
   new Promise(resolve =>
     setTimeout(() => {
@@ -153,26 +129,26 @@ export const delay = ms =>
     }, ms)
   )
 
+/**
+ * Returns the scheduled last square-off time used for MIS orders.
+ * Formatted string suitable for dayjs parsing.
+ */
 export const getMisOrderLastSquareOffTime = () =>
-  dayjs()
-    .set('hour', 15)
-    .set('minutes', 24)
-    .set('seconds', 0)
-    .format()
+  dayjs().set("hour", 15).set("minutes", 24).set("seconds", 0).format()
 
 const getSortedMatchingIntrumentsData = async ({
   nfoSymbol, //NIFTY,BANKNIFTY,FINNIFTY
   strike,
   instrumentType, //CE,PE,FUT
-  tradingsymbol
+  tradingsymbol,
 }: {
   nfoSymbol?: string
   strike?: number
   instrumentType?: string
   tradingsymbol?: string
-}): Promise<KITE_INSTRUMENT_INFO[]> => {
+}): Promise<Instrument[]> => {
   const instrumentsData = await getIndexInstruments()
-  const rows: KITE_INSTRUMENT_INFO[] = instrumentsData
+  const rows: Instrument[] = instrumentsData
     .filter(
       item =>
         (nfoSymbol ? item.name === nfoSymbol : true) &&
@@ -180,9 +156,7 @@ const getSortedMatchingIntrumentsData = async ({
         (tradingsymbol ? item.tradingsymbol === tradingsymbol : true) &&
         (instrumentType ? item.instrument_type === instrumentType : true)
     )
-    .sort((row1, row2) =>
-      dayjs(row1.expiry).isSameOrBefore(dayjs(row2.expiry)) ? -1 : 1
-    )
+    .sort((row1, row2) => (dayjs(row1.expiry).isSameOrBefore(dayjs(row2.expiry)) ? -1 : 1))
   return rows
 }
 /*
@@ -192,61 +166,54 @@ const getOTMOptions = async ({
   nfoSymbol, //NIFTY,BANKNIFTY,FINNIFTY
   strike,
   instrumentType, //CE,PE,FUT
-  expiry
+  expiry,
 }: {
   nfoSymbol?: string
   strike?: number
   instrumentType?: string
   expiry?: string
-}): Promise<KITE_INSTRUMENT_INFO[]> => {
+}): Promise<Instrument[]> => {
   const instrumentsData = await getIndexInstruments()
-  const rows: KITE_INSTRUMENT_INFO[] = instrumentsData
+  const rows: Instrument[] = instrumentsData
     .filter(
       item =>
         (nfoSymbol ? item.name === nfoSymbol : true) &&
-        (strike?(instrumentType==="CE"?item.strike>strike:item.strike<strike):true) &&
-      //  (strike ? item.strike == strike : true) && // eslint-disable-line
+        (strike ? (instrumentType === "CE" ? item.strike > strike : item.strike < strike) : true) &&
+        //  (strike ? item.strike == strike : true) && // eslint-disable-line
         (instrumentType ? item.instrument_type === instrumentType : true) &&
-        (expiry ? item.expiry === expiry : true) 
+        (expiry ? item.expiry === expiry : true)
     )
-    .sort((row1, row2) =>
-      row1.strike<row2.strike ? -1 : 1
-    )
+    .sort((row1, row2) => (row1.strike < row2.strike ? -1 : 1))
   return rows
 }
 
-export async function getOHLC({kite,symbol,instrument}):Promise<any>
- {
-  try
-  {
-  
-  //console.log(`Checking ${await kite.getOHLC([NIFTY,BANKNIFTY])}`);
-  const data=await kite.getOHLC(symbol);
-  //console.log(`checking ${await kite.getOHLC(["NSE:NIFTY 50","NSE:NIFTY BANK"])}`);
-  console.log (data);
-  if (data[symbol].last_price<data[symbol].ohlc.open)
-  data[symbol].trend="CE"
-else
-data[symbol].trend="PE"
+/**
+ * Fetch OHLC data for a given symbol using Kite and return trend/last price.
+ * @param kite - Kite connect instance
+ * @param symbol - exchange:tradingsymbol string
+ */
+export async function getOHLC({ kite, symbol, instrument }): Promise<any> {
+  try {
+    //console.log(`Checking ${await kite.getOHLC([NIFTY,BANKNIFTY])}`);
+    const data = await kite.getOHLC(symbol)
+    //console.log(`checking ${await kite.getOHLC(["NSE:NIFTY 50","NSE:NIFTY BANK"])}`);
+    logger.info("getOHLC data", data)
+    if (data[symbol].last_price < data[symbol].ohlc.open) data[symbol].trend = "CE"
+    else data[symbol].trend = "PE"
 
-  return ({
-      "trend":data[symbol].trend,
-      "last_price":data[symbol].last_price
-  })
-  //  data=await kite.getOHLC("NSE:NIFTY BANK");
-  // //console.log(`checking ${await kite.getOHLC(["NSE:NIFTY 50","NSE:NIFTY BANK"])}`);
-  // console.log(`Another ${data}`);
-  // logDeep(data);
-  
- }
- catch (  e)
- {
-  console.log(`Excpetion is coming: ${e}`);
-  
- }
+    return {
+      trend: data[symbol].trend,
+      last_price: data[symbol].last_price,
+    }
+    //  data=await kite.getOHLC("NSE:NIFTY BANK");
+    // //console.log(`checking ${await kite.getOHLC(["NSE:NIFTY 50","NSE:NIFTY BANK"])}`);
+    // console.log(`Another ${data}`);
+    // logDeep(data);
+  } catch (e) {
+    logger.info(`Excpetion is coming: ${e}`)
+  }
 
-
- /* export async function getInstrumentPrice (
+  /* export async function getInstrumentPrice (
     kite,
     underlying: string,
     exchange: string
@@ -258,13 +225,16 @@ data[symbol].trend="PE"
   */
 }
 
-
+/**
+ * Resolve a trading symbol or strike object for a given expiry type.
+ * @param params - lookup parameters including nfoSymbol, strike, instrumentType
+ */
 export const getExpiryTradingSymbol = async ({
   nfoSymbol,
   strike,
   instrumentType,
   tradingsymbol,
-  expiry = EXPIRY_TYPE.CURRENT
+  expiry = EXPIRY_TYPE.CURRENT,
 }: {
   nfoSymbol?: string
   strike?: number
@@ -272,14 +242,14 @@ export const getExpiryTradingSymbol = async ({
   tradingsymbol?: string
   expiry?: EXPIRY_TYPE
 }): Promise<TradingSymbolInterface | StrikeInterface | null> => {
-  console.log('Fetching trading symbol for expiry type: ', expiry)
+  logger.info("Fetching trading symbol for expiry type: ", expiry)
   switch (expiry) {
     case EXPIRY_TYPE.MONTHLY:
       return getMonthlyExpiryTradingSymbol({
         nfoSymbol,
         strike,
         instrumentType,
-        tradingsymbol
+        tradingsymbol,
       })
 
     case EXPIRY_TYPE.NEXT:
@@ -287,7 +257,7 @@ export const getExpiryTradingSymbol = async ({
         nfoSymbol,
         strike,
         instrumentType,
-        tradingsymbol
+        tradingsymbol,
       })
 
     default:
@@ -295,16 +265,19 @@ export const getExpiryTradingSymbol = async ({
         nfoSymbol,
         strike,
         instrumentType,
-        tradingsymbol
+        tradingsymbol,
       })
   }
 }
 
+/**
+ * Get the current expiry trading symbol (CE/PE or FUT) for a strike or instrument.
+ */
 export const getCurrentExpiryTradingSymbol = async ({
   nfoSymbol,
   strike,
   instrumentType,
-  tradingsymbol
+  tradingsymbol,
 }: {
   nfoSymbol?: string
   strike?: number
@@ -315,7 +288,7 @@ export const getCurrentExpiryTradingSymbol = async ({
     nfoSymbol,
     strike,
     instrumentType,
-    tradingsymbol
+    tradingsymbol,
   })
 
   if (instrumentType) {
@@ -324,27 +297,27 @@ export const getCurrentExpiryTradingSymbol = async ({
   // get first two entries for current expiry
   const relevantRows = rows.slice(0, 2)
 
-  const peStrike = relevantRows?.find(item => item.instrument_type === 'PE')
-    ?.tradingsymbol
-  const ceStrike = relevantRows?.find(item => item.instrument_type === 'CE')
-    ?.tradingsymbol
-    const lotSize=relevantRows?.find(item => item.instrument_type === 'PE')
-    ?.lot_size
+  const peStrike = relevantRows?.find(item => item.instrument_type === "PE")?.tradingsymbol
+  const ceStrike = relevantRows?.find(item => item.instrument_type === "CE")?.tradingsymbol
+  const lotSize = relevantRows?.find(item => item.instrument_type === "PE")?.lot_size
 
   if (!peStrike || !ceStrike) return null
 
   return {
     PE_STRING: peStrike,
     CE_STRING: ceStrike,
-    LOT_SIZE :parseInt(lotSize!)
+    LOT_SIZE: Number(lotSize!),
   }
 }
 
+/**
+ * Get the next expiry trading symbol for a strike or instrument.
+ */
 export const getNextExpiryTradingSymbol = async ({
   nfoSymbol,
   strike,
   instrumentType,
-  tradingsymbol
+  tradingsymbol,
 }: {
   nfoSymbol?: string
   strike?: number
@@ -355,7 +328,7 @@ export const getNextExpiryTradingSymbol = async ({
     nfoSymbol,
     strike,
     instrumentType,
-    tradingsymbol
+    tradingsymbol,
   })
 
   if (instrumentType) {
@@ -364,27 +337,27 @@ export const getNextExpiryTradingSymbol = async ({
   // first two entries are CE and PE for current week. So taking the next two items here
   const relevantRows = rows.slice(2, 4)
 
-  const peStrike = relevantRows?.find(item => item.instrument_type === 'PE')
-    ?.tradingsymbol
-  const ceStrike = relevantRows?.find(item => item.instrument_type === 'CE')
-    ?.tradingsymbol
-   const lotSize=relevantRows?.find(item => item.instrument_type === 'PE')
-    ?.lot_size
+  const peStrike = relevantRows?.find(item => item.instrument_type === "PE")?.tradingsymbol
+  const ceStrike = relevantRows?.find(item => item.instrument_type === "CE")?.tradingsymbol
+  const lotSize = relevantRows?.find(item => item.instrument_type === "PE")?.lot_size
 
   if (!peStrike || !ceStrike) return null
 
   return {
     PE_STRING: peStrike,
     CE_STRING: ceStrike,
-    LOT_SIZE :parseInt(lotSize!)
+    LOT_SIZE: Number(lotSize!),
   }
 }
 
+/**
+ * Get the monthly expiry trading symbol, handling month boundary cases.
+ */
 export const getMonthlyExpiryTradingSymbol = async ({
   nfoSymbol,
   strike,
   instrumentType,
-  tradingsymbol
+  tradingsymbol,
 }: {
   nfoSymbol?: string
   strike?: number
@@ -395,24 +368,20 @@ export const getMonthlyExpiryTradingSymbol = async ({
     nfoSymbol,
     strike,
     instrumentType,
-    tradingsymbol
+    tradingsymbol,
   })
 
   // get current calendar month expiries
   let rows = instrumentsData.filter(
-    item => dayjs().get('month') === dayjs(item.expiry).get('month')
+    item => dayjs().get("month") === dayjs(item.expiry).get("month")
   )
 
   //get next calendar month expiries
   if (!rows.length) {
-    const month = dayjs().get('month') === 11 ? 0 : dayjs().get('month') // to handle December current year & Jan next year cases
-    rows = instrumentsData.filter(
-      item => dayjs(item.expiry).get('month') === month
-    )
+    const month = dayjs().get("month") === 11 ? 0 : dayjs().get("month") // to handle December current year & Jan next year cases
+    rows = instrumentsData.filter(item => dayjs(item.expiry).get("month") === month)
   }
-  rows = rows.sort((row1, row2) =>
-    dayjs(row1.expiry).isSameOrBefore(dayjs(row2.expiry)) ? -1 : 1
-  )
+  rows = rows.sort((row1, row2) => (dayjs(row1.expiry).isSameOrBefore(dayjs(row2.expiry)) ? -1 : 1))
 
   const rowsLength = rows.length
 
@@ -422,33 +391,37 @@ export const getMonthlyExpiryTradingSymbol = async ({
   // get last two entries for monthly expiry
   const relevantRows = rows.slice(rowsLength - 2, rowsLength)
 
-  const peStrike = relevantRows?.find(item => item.instrument_type === 'PE')
-    ?.tradingsymbol
-  const ceStrike = relevantRows?.find(item => item.instrument_type === 'CE')
-    ?.tradingsymbol
-  const lotSize=relevantRows?.find(item => item.instrument_type === 'PE')
-  ?.lot_size
+  const peStrike = relevantRows?.find(item => item.instrument_type === "PE")?.tradingsymbol
+  const ceStrike = relevantRows?.find(item => item.instrument_type === "CE")?.tradingsymbol
+  const lotSize = relevantRows?.find(item => item.instrument_type === "PE")?.lot_size
 
   if (!peStrike || !ceStrike) return null
 
   return {
     PE_STRING: peStrike,
     CE_STRING: ceStrike,
-    LOT_SIZE :parseInt(lotSize!)
+    LOT_SIZE: Number(lotSize!),
   }
 }
 
-export function getPercentageChange (
-  price1: number,
-  price2: number,
-  mode = 'AGGRESIVE'
-): number {
-  const denominator =
-    mode === 'AGGRESIVE' ? (price1 + price2) / 2 : Math.min(price1, price2)
+/**
+ * Calculate percentage change between two prices.
+ * @param price1
+ * @param price2
+ * @param mode - calculation mode
+ */
+export function getPercentageChange(price1: number, price2: number, mode = "AGGRESIVE"): number {
+  const denominator = mode === "AGGRESIVE" ? (price1 + price2) / 2 : Math.min(price1, price2)
   return Math.floor((Math.abs(price1 - price2) / denominator) * 100)
 }
 
-export async function getInstrumentPrice (
+/**
+ * Fetch last traded price for an instrument using Kite LTP API.
+ * @param kite - Kite instance
+ * @param underlying - trading symbol
+ * @param exchange - exchange string
+ */
+export async function getInstrumentPrice(
   kite,
   underlying: string,
   exchange: string
@@ -458,54 +431,48 @@ export async function getInstrumentPrice (
   return Number(underlyingRes[instrumentString].last_price)
 }
 
-export async function getSkew (kite, instrument1, instrument2, exchange) {
+/**
+ * Calculate price skew between two instruments using their LTPs.
+ */
+export async function getSkew(kite, instrument1, instrument2, exchange) {
   const [price1, price2] = await Promise.all([
     getInstrumentPrice(kite, instrument1, exchange),
-    getInstrumentPrice(kite, instrument2, exchange)
+    getInstrumentPrice(kite, instrument2, exchange),
   ])
 
   const skew = getPercentageChange(price1, price2)
   return {
     [instrument1]: price1,
     [instrument2]: price2,
-    skew
+    skew,
   }
 }
 
-export function syncGetKiteInstance (user):KiteConnect {
-  const accessToken = user?.session?.access_token
-  if (!accessToken) {
-    throw new Error(
-      'missing access_token in `user` object, or `user` is undefined'
-    )
-  }
-  return new KiteConnect({
-    api_key: KITE_API_KEY,
-    access_token: accessToken
-  })
-}
-
-export async function getCompletedOrderFromOrderHistoryById (kite, orderId) {
+/**
+ * Fetch completed order details from Kite order history by order id.
+ * @returns the completed order or undefined
+ */
+export async function getCompletedOrderFromOrderHistoryById(kite, orderId) {
   const orders = await kite.getOrderHistory(orderId)
-  return orders.find(odr => odr.status === 'COMPLETE')
+  return orders.find(odr => odr.status === "COMPLETE")
 }
 
-export async function getAllOrNoneCompletedOrdersByKiteResponse (
-  kite,
-  rawKiteOrdersResponse
-) {
+/**
+ * Given a Kite orders response, return all completed orders or null if any incomplete.
+ */
+export async function getAllOrNoneCompletedOrdersByKiteResponse(kite, rawKiteOrdersResponse) {
   if (MOCK_ORDERS) {
-    return [...new Array(rawKiteOrdersResponse.length)].fill(
-      COMPLETED_ORDER_RESPONSE
-    )
+    return [...new Array(rawKiteOrdersResponse.length)].fill(COMPLETED_ORDER_RESPONSE)
   }
 
   try {
     const completedOrders = (
       await Promise.all(
-        rawKiteOrdersResponse.map((
-          { order_id } // eslint-disable-line
-        ) => getCompletedOrderFromOrderHistoryById(kite, order_id))
+        rawKiteOrdersResponse.map(
+          (
+            { order_id } // eslint-disable-line
+          ) => getCompletedOrderFromOrderHistoryById(kite, order_id)
+        )
       )
     ).filter(o => o)
 
@@ -515,76 +482,87 @@ export async function getAllOrNoneCompletedOrdersByKiteResponse (
 
     return completedOrders
   } catch (e) {
-    console.error('getAllOrNoneCompletedOrdersByKiteResponse error', {
+    logger.error("getAllOrNoneCompletedOrdersByKiteResponse error", {
       e,
-      rawKiteOrdersResponse
+      rawKiteOrdersResponse,
     })
     return null
   }
 }
 
+/**
+ * Log an object with an optional heading as pretty JSON.
+ * @param heading - optional heading string
+ * @param object - payload to log
+ */
 export const logObject = (heading, object) =>
-  typeof heading === 'string'
-    ? console.log(heading, JSON.stringify(object, null, 2))
-    : console.log(JSON.stringify(heading, null, 2))
+  typeof heading === "string"
+    ? logger.info(heading, JSON.stringify(object, null, 2))
+    : logger.info(JSON.stringify(heading, null, 2))
 
+/**
+ * Return milliseconds left until market closing (or a hardcoded value for localhost).
+ */
 export const getTimeLeftInMarketClosingMs = () =>
-  process.env.NEXT_PUBLIC_APP_URL?.includes('localhost:')
+  process.env.NEXT_PUBLIC_APP_URL?.includes("localhost:")
     ? ms(1 * 60 * 60) // if developing, hardcode one hour to market closing
     : dayjs(getMisOrderLastSquareOffTime()).diff(dayjs())
 
 //Returns a boolean to check if current time is after square off time
-export const isTimeAfterAutoSquareOff=(squareOffTime: string)=>
-{
-const finalOrderTime = getMisOrderLastSquareOffTime()
-const runAtTime = isMockOrder()
-  ? squareOffTime
-  : dayjs(squareOffTime).isAfter(dayjs(finalOrderTime))
-  ? finalOrderTime
-  : squareOffTime
+/**
+ * Check whether the current time is after the provided auto square-off time.
+ * @param squareOffTime - ISO or parseable time string
+ */
+export const isTimeAfterAutoSquareOff = (squareOffTime: string) => {
+  const finalOrderTime = getMisOrderLastSquareOffTime()
+  const runAtTime = isMockOrder()
+    ? squareOffTime
+    : dayjs(squareOffTime).isAfter(dayjs(finalOrderTime))
+      ? finalOrderTime
+      : squareOffTime
 
- return dayjs().isAfter(runAtTime);
-
+  return dayjs().isAfter(runAtTime)
 }
 
-export const getEntryAttemptsCount = ({ strategy }) => {
-  switch (strategy) {
-    case STRATEGIES.DIRECTIONAL_OPTION_SELLING:
-      return Math.ceil(getTimeLeftInMarketClosingMs() / ms(5 * 60))
-    case STRATEGIES.OPTION_BUYING_STRATEGY:
-      return Math.ceil(getTimeLeftInMarketClosingMs() / ms(1 * 60))
-    default:
-      return null
-  }
+/**
+ * Returns number of entry attempts to try based on strategy and time left in market.
+ */
+export const getEntryAttemptsCount = (_args: unknown) => {
+  return null
 }
 
-export const getBackoffStrategy = ({ strategy }) => {
-  switch (strategy) {
-    case STRATEGIES.DIRECTIONAL_OPTION_SELLING:
-      return 'backOffToNearest5thMinute'
-    case STRATEGIES.OPTION_BUYING_STRATEGY:
-      return 'backOffToNearestMinute'
-    default:
-      return 'fixed'
-  }
+/**
+ * Map strategy to a backoff strategy name used by queues.
+ */
+export const getBackoffStrategy = (_args: unknown) => {
+  return "fixed"
 }
 
+/**
+ * Produce a custom backoff strategy function to be used with job retries.
+ */
 export const getCustomBackoffStrategies = () => {
-  return {
-    backOffToNearest5thMinute () {
-      return dayjs(getNextNthMinute(5 * 60 * 1000)).diff(dayjs())
-    },
-    backOffToNearestMinute () {
-      return dayjs(getNextNthMinute(1 * 60 * 1000)).diff(dayjs())
+  return (attemptsMade, type = "fixed", err, job) => {
+    switch (type) {
+      case "backOffToNearest5thMinute":
+        return dayjs(getNextNthMinute(5 * 60 * 1000)).diff(dayjs())
+      case "backOffToNearestMinute":
+        return dayjs(getNextNthMinute(1 * 60 * 1000)).diff(dayjs())
+      default: {
+        const delay = job?.opts?.backoff?.delay
+        return typeof delay === "number" ? delay : 0
+      }
     }
   }
 }
 
+/**
+ * Return queue retry/backoff options for a given exit strategy.
+ * @param exitStrategy - enum from EXIT_STRATEGIES
+ */
 export const getQueueOptionsForExitStrategy = exitStrategy => {
   if (!exitStrategy) {
-    throw new Error(
-      'getQueueOptionsForExitStrategy called without exitStrategy'
-    )
+    throw new Error("getQueueOptionsForExitStrategy called without exitStrategy")
   }
 
   switch (exitStrategy) {
@@ -593,9 +571,9 @@ export const getQueueOptionsForExitStrategy = exitStrategy => {
       return {
         attempts: Math.ceil(getTimeLeftInMarketClosingMs() / recheckInterval),
         backoff: {
-          type: 'fixed',
-          delay: recheckInterval
-        }
+          type: "fixed",
+          delay: recheckInterval,
+        },
       }
     }
     case EXIT_STRATEGIES.MIN_XPERCENT_OR_SUPERTREND: {
@@ -603,8 +581,8 @@ export const getQueueOptionsForExitStrategy = exitStrategy => {
       return {
         attempts: Math.ceil(getTimeLeftInMarketClosingMs() / recheckInterval),
         backoff: {
-          type: 'backOffToNearest5thMinute'
-        }
+          type: "backOffToNearest5thMinute",
+        },
       }
     }
     case EXIT_STRATEGIES.OBS_TRAIL_SL: {
@@ -612,102 +590,108 @@ export const getQueueOptionsForExitStrategy = exitStrategy => {
       return {
         attempts: Math.ceil(getTimeLeftInMarketClosingMs() / recheckInterval),
         backoff: {
-          type: 'backOffToNearestMinute'
-        }
+          type: "backOffToNearestMinute",
+        },
       }
     }
     default:
       return {
         attempts: 20,
         backoff: {
-          type: 'fixed',
-          delay: ms(3)
-        }
+          type: "fixed",
+          delay: ms(3),
+        },
       }
   }
 }
 
 const marketHolidays = [
-  ['September 20,2018', 'Thursday'],
-  ['October 02,2018', 'Tuesday'],
-  ['October 18,2018', 'Thursday'],
-  ['November 07,2018', 'Wednesday'],
-  ['November 08,2018', 'Thursday'],
-  ['November 23,2018', 'Friday'],
-  ['December 25,2018', 'Tuesday'],
-  ['March 04,2019', 'Monday'],
-  ['March 21,2019', 'Thursday'],
-  ['April 17,2019', 'Wednesday'],
-  ['April 19,2019', 'Friday'],
-  ['April 29,2019', 'Monday'],
-  ['May 01,2019', 'Wednesday'],
-  ['June 05,2019', 'Wednesday'],
-  ['August 12,2019', 'Monday'],
-  ['August 15,2019', 'Thursday'],
-  ['September 02,2019', 'Monday'],
-  ['September 10,2019', 'Tuesday'],
-  ['October 02,2019', 'Wednesday'],
-  ['October 08,2019', 'Tuesday'],
-  ['October 21,2019', 'Monday'],
-  ['October 28,2019', 'Monday'],
-  ['November 12,2019', 'Tuesday'],
-  ['December 25,2019', 'Wednesday'],
-  ['February 21, 2020', 'Friday'],
-  ['March 10,2020', 'Tuesday'],
-  ['April 02,2020', 'Thursday'],
-  ['April 06,2020', 'Monday'],
-  ['April 10,2020', 'Friday'],
-  ['April 14,2020', 'Tuesday'],
-  ['May 01,2020', 'Friday'],
-  ['May 25,2020', 'Monday'],
-  ['October 02,2020', 'Friday'],
-  ['November 16,2020', 'Monday'],
-  ['November 30,2020', 'Monday'],
-  ['December 25,2020', 'Friday'],
-  ['January 26,2021', 'Tuesday'],
-  ['March 11,2021', 'Thursday'],
-  ['March 29,2021', 'Monday'],
-  ['April 02,2021', 'Friday'],
-  ['April 14,2021', 'Wednesday'],
-  ['April 21,2021', 'Wednesday'],
-  ['May 13,2021', 'Thursday'],
-  ['July 21,2021', 'Wednesday'],
-  ['August 19,2021', 'Thursday'],
-  ['September 10,2021', 'Friday'],
-  ['October 15,2021', 'Friday'],
-  ['November 04,2021', 'Thursday'],
-  ['November 05,2021', 'Friday'],
-  ['November 19,2021', 'Friday'],
-  ['January 26,2022', 'Wednesday'],
-  ['March 01,2022', 'Tuesday'],
-  ['March 18,2022', 'Friday'],
-  ['April 14,2022', 'Thursday'],
-  ['April 15,2022', 'Friday'],
-  ['May 03,2022', 'Tuesday'],
-  ['August 09,2022', 'Tuesday'],
-  ['August 15,2022', 'Monday'],
-  ['August 31,2022', 'Wednesday'],
-  ['October 05,2022', 'Wednesday'],
-  ['October 24,2022', 'Monday'],
-  ['October 26,2022', 'Wednesday'],
-  ['November 08,2022', 'Tuesday']
+  ["September 20,2018", "Thursday"],
+  ["October 02,2018", "Tuesday"],
+  ["October 18,2018", "Thursday"],
+  ["November 07,2018", "Wednesday"],
+  ["November 08,2018", "Thursday"],
+  ["November 23,2018", "Friday"],
+  ["December 25,2018", "Tuesday"],
+  ["March 04,2019", "Monday"],
+  ["March 21,2019", "Thursday"],
+  ["April 17,2019", "Wednesday"],
+  ["April 19,2019", "Friday"],
+  ["April 29,2019", "Monday"],
+  ["May 01,2019", "Wednesday"],
+  ["June 05,2019", "Wednesday"],
+  ["August 12,2019", "Monday"],
+  ["August 15,2019", "Thursday"],
+  ["September 02,2019", "Monday"],
+  ["September 10,2019", "Tuesday"],
+  ["October 02,2019", "Wednesday"],
+  ["October 08,2019", "Tuesday"],
+  ["October 21,2019", "Monday"],
+  ["October 28,2019", "Monday"],
+  ["November 12,2019", "Tuesday"],
+  ["December 25,2019", "Wednesday"],
+  ["February 21, 2020", "Friday"],
+  ["March 10,2020", "Tuesday"],
+  ["April 02,2020", "Thursday"],
+  ["April 06,2020", "Monday"],
+  ["April 10,2020", "Friday"],
+  ["April 14,2020", "Tuesday"],
+  ["May 01,2020", "Friday"],
+  ["May 25,2020", "Monday"],
+  ["October 02,2020", "Friday"],
+  ["November 16,2020", "Monday"],
+  ["November 30,2020", "Monday"],
+  ["December 25,2020", "Friday"],
+  ["January 26,2021", "Tuesday"],
+  ["March 11,2021", "Thursday"],
+  ["March 29,2021", "Monday"],
+  ["April 02,2021", "Friday"],
+  ["April 14,2021", "Wednesday"],
+  ["April 21,2021", "Wednesday"],
+  ["May 13,2021", "Thursday"],
+  ["July 21,2021", "Wednesday"],
+  ["August 19,2021", "Thursday"],
+  ["September 10,2021", "Friday"],
+  ["October 15,2021", "Friday"],
+  ["November 04,2021", "Thursday"],
+  ["November 05,2021", "Friday"],
+  ["November 19,2021", "Friday"],
+  ["January 26,2022", "Wednesday"],
+  ["March 01,2022", "Tuesday"],
+  ["March 18,2022", "Friday"],
+  ["April 14,2022", "Thursday"],
+  ["April 15,2022", "Friday"],
+  ["May 03,2022", "Tuesday"],
+  ["August 09,2022", "Tuesday"],
+  ["August 15,2022", "Monday"],
+  ["August 31,2022", "Wednesday"],
+  ["October 05,2022", "Wednesday"],
+  ["October 24,2022", "Monday"],
+  ["October 26,2022", "Wednesday"],
+  ["November 08,2022", "Tuesday"],
 ]
 
+/**
+ * Check whether a date is a market holiday or weekend.
+ */
 export const isDateHoliday = (date: Dayjs) => {
   const isMarketHoliday = marketHolidays.find(
-    holidays => holidays[0] === date.format('MMMM DD,YYYY')
+    holidays => holidays[0] === date.format("MMMM DD,YYYY")
   )
   if (isMarketHoliday) {
     return true
   }
-  const day = date.format('dddd')
-  const isWeeklyHoliday = day === 'Saturday' || day === 'Sunday'
+  const day = date.format("dddd")
+  const isWeeklyHoliday = day === "Saturday" || day === "Sunday"
   return isWeeklyHoliday
 }
 
+/**
+ * Recursively find the last open market date since `from`.
+ */
 export const getLastOpenDateSince = (from: Dayjs) => {
-  const fromDay = from.format('dddd')
-  const yesterday = from.subtract(fromDay === 'Monday' ? 3 : 1, 'days')
+  const fromDay = from.format("dddd")
+  const yesterday = from.subtract(fromDay === "Monday" ? 3 : 1, "days")
   if (isDateHoliday(yesterday)) {
     return getLastOpenDateSince(yesterday)
   }
@@ -715,61 +699,43 @@ export const getLastOpenDateSince = (from: Dayjs) => {
   return yesterday
 }
 
+/**
+ * Check whether the provided access token matches the latest stored token in DB.
+ */
 export const checkHasSameAccessToken = async (accessToken: string) => {
   try {
-    // const {
-    //   data: [token]
-    // } = await axios(ACCESS_TOKEN_URL)
-    // const { access_token: dbAccessToken } = token
-    const {data:{items:[item]}}= await axios(
-      `${ORCL_HOST_URL}/rest-v1/access_tokens`
-);
-const { access_token: dbAccessToken } = item
+    const dbAccessToken = await getLatestAccessToken()
     return dbAccessToken === accessToken
   } catch (e) {
-    console.log('🔴 [storeAccessTokenRemotely] error', e)
+    logger.error("🔴 [checkHasSameAccessToken] error", e)
     return false
   }
 }
 
-export const storeAccessTokenRemotely = async accessToken => {
-   try {
-  //  await axios.post(
-  //     `${ORCL_HOST_URL}/rest-v1/access_tokens`,
-  //     {
-  //       access_token: accessToken
-  //     }
-  //   )
-  await axios.post(
-    `${SUPABASE_URL}/functions/v1/insertAccesstoken`,
-    {
-      access_token: accessToken
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.SUPABASE_API_KEY}`,
-        'Content-Type': 'application/json'
-      }
-    }
-  );
-  console.log('✅ [storeAccessTokenRemotely] success');
-}
-   catch (e) {
-    console.log('🔴 [storeAccessTokenRemotely] error', e)
+/**
+ * Store an access token remotely (DB) and log result.
+ */
+export const storeAccessTokenRemotely = async (accessToken: string) => {
+  try {
+    await storeAccessToken(accessToken)
+    logger.info("✅ [storeAccessTokenRemotely] success")
+  } catch (e) {
+    logger.error("🔴 [storeAccessTokenRemotely] error", e)
   }
 }
 
-export const getNearestCandleTime = (
-  intervalMs,
-  referenceDate = new Date()
-) => {
-  const nearestCandle = new Date(
-    Math.floor(referenceDate.getTime() / intervalMs) * intervalMs
-  )
+/**
+ * Return nearest candle time (rounded down) for a given interval.
+ */
+export const getNearestCandleTime = (intervalMs, referenceDate = new Date()) => {
+  const nearestCandle = new Date(Math.floor(referenceDate.getTime() / intervalMs) * intervalMs)
   // https://kite.trade/forum/discussion/7798/historical-data-candles-inaccurate-for-small-periods
-  return dayjs(nearestCandle).subtract(1, 'second')
+  return dayjs(nearestCandle).subtract(1, "second")
 }
 
+/**
+ * Return the next timestamp rounded up to the nearest `intervalMs` boundary.
+ */
 export const getNextNthMinute = intervalMs => {
   // ref: https://stackoverflow.com/a/10789415/721084
   const date = new Date()
@@ -777,57 +743,47 @@ export const getNextNthMinute = intervalMs => {
   return rounded
 }
 
+/**
+ * Ensure user has sufficient margin for a basket order by checking Kite margins.
+ * @returns boolean whether order can be placed
+ */
 export const ensureMarginForBasketOrder = async (user, orders) => {
   const kite = syncGetKiteInstance(user)
-  const {
-    equity: { net }
-  } = await kite.getMargins()
+  const margins = await kite.getMargins()
+  const net = margins.equity?.net ?? 0
 
-  console.log('[ensureMarginForBasketOrder]', { net })
+  logger.info("[ensureMarginForBasketOrder]", { net })
 
-  const { data } = await axios.post(
-    'https://api.kite.trade/margins/basket?consider_positions=true&mode=compact',
-    orders,
-    {
-      headers: {
-        'X-Kite-Version': 3,
-        Authorization: `token ${KITE_API_KEY as string}:${user.session
-          .access_token as string}`,
-        'Content-Type': 'application/json'
-      }
-    }
-  )
+  const totalMarginRequired = await orderBasketMargins(user.session.access_token, orders)
 
-  const totalMarginRequired = data?.data?.initial?.total
-
-  console.log('[ensureMarginForBasketOrder]', { totalMarginRequired })
+  logger.info("[ensureMarginForBasketOrder]", { totalMarginRequired })
 
   const canPunch = totalMarginRequired < net
   if (!canPunch) {
-    console.log('🔴 [ensureMarginForBasketOrder] margin check failed!')
+    logger.error("🔴 [ensureMarginForBasketOrder] margin check failed!")
   }
 
   return canPunch
 }
 
+/**
+ * Check whether market is currently open (based on hard-coded session times).
+ */
 export const isMarketOpen = (time = dayjs()) => {
   if (isDateHoliday(time)) {
     return false
   }
 
-  const startTime = time
-    .set('hour', 9)
-    .set('minute', 15)
-    .set('second', 0)
-  const endTime = time
-    .set('hour', 15)
-    .set('minute', 30)
-    .set('second', 0)
+  const startTime = time.set("hour", 9).set("minute", 15).set("second", 0)
+  const endTime = time.set("hour", 15).set("minute", 30).set("second", 0)
 
   return time.isAfter(startTime) && time.isBefore(endTime)
 }
 
-export function randomIntFromInterval (min: number, max: number) {
+/**
+ * Return a random integer between min and max inclusive.
+ */
+export function randomIntFromInterval(min: number, max: number) {
   // min and max included
   return Math.floor(Math.random() * (max - min + 1) + min)
 }
@@ -838,7 +794,10 @@ interface LTP_TYPE {
   last_price: number
 }
 
-export function closest (
+/**
+ * Find the item in `haystack` with a key closest to `needle`.
+ */
+export function closest(
   needle: number,
   haystack: Array<LTP_TYPE | any>,
   haystackKey: string,
@@ -848,19 +807,14 @@ export function closest (
     if (greaterThanEqualToPrice) {
       return item[haystackKey] >= needle
     }
-    return (
-      item[haystackKey] >= needle ||
-      getPercentageChange(item[haystackKey], needle) <= 10
-    )
+    return item[haystackKey] >= needle || getPercentageChange(item[haystackKey], needle) <= 10
   })
   /**
    * the above ensures that we pick up a price lower than needle price,
    * only if it's at most 10% lesser than the needle price
    */
   return filtered.reduce((prev, curr) =>
-    Math.abs(curr[haystackKey] - needle) < Math.abs(prev[haystackKey] - needle)
-      ? curr
-      : prev
+    Math.abs(curr[haystackKey] - needle) < Math.abs(prev[haystackKey] - needle) ? curr : prev
   )
 }
 
@@ -874,172 +828,124 @@ interface TRADING_SYMBOL_BY_OPTION_PRICE_TYPE {
   expiry?: EXPIRY_TYPE
 }
 
-export const getMultipleInstrumentPrices = async (
-  instruments: GET_LTP_ARGS[],
-  user: SignalXUser
-): Promise<Record<string, GET_LTP_RESPONSE>> => {
-  const {
-    data: { data: pricesDetailsof }
-  } = await withRemoteRetry(async () =>
-    axios(
-      `https://api.kite.trade/quote/ltp?${instruments
-        .map(({ exchange, tradingSymbol }) => `i=${exchange}:${tradingSymbol}`)
-        .join('&')}`,
-      {
-        headers: {
-          'X-Kite-Version': 3,
-          Authorization: `token ${KITE_API_KEY as string}:${user.session
-            .access_token as string}`
-        }
-      }
-    )
-  )
-  const formattedResponse = Object.keys(pricesDetailsof).reduce(
-    (accum, exchangeTradingSymbol) => {
-      const [exchange, tradingSymbol] = exchangeTradingSymbol.split(':')
-      const {
-        instrument_token: instrumentToken,
-        last_price: lastPrice
-      } = pricesDetailsof[exchangeTradingSymbol]
-      return {
-        ...accum,
-        [tradingSymbol]: {
-          exchange,
-          tradingSymbol,
-          instrumentToken,
-          lastPrice
-        }
-      }
-    },
-    {}
-  )
+// `getMultipleInstrumentPrices` moved to `lib/kiteUtils.ts` and now uses the Kite SDK.
 
-  return formattedResponse
-}
-
+/**
+ * Given a target option price and pivot, return the OTM strangle instruments.
+ */
 export const getOTMStrangleByOptionPrice = async ({
   nfoSymbol,
   price,
   pivotStrike,
   user,
   greaterThanEqualToPrice = false,
-  expiry = EXPIRY_TYPE.CURRENT
-}: TRADING_SYMBOL_BY_OPTION_PRICE_TYPE):Promise<Partial<KITE_INSTRUMENT_INFO>[]> => {
-  console.log(`[utils.getOTMStrangleByOptionPrice] nfoSymbol ${nfoSymbol}, price:${price}, pivotStrike:${pivotStrike}`)
+  expiry = EXPIRY_TYPE.CURRENT,
+}: TRADING_SYMBOL_BY_OPTION_PRICE_TYPE): Promise<Partial<Instrument>[]> => {
+  logger.info(
+    `[utils.getOTMStrangleByOptionPrice] nfoSymbol ${nfoSymbol}, price:${price}, pivotStrike:${pivotStrike}`
+  )
   const kite = syncGetKiteInstance(user)
-  const expiryArray=await getNiftyOptionExpiries();
-  let expiryDate:string;
-  if (expiry===EXPIRY_TYPE.CURRENT)
-     expiryDate=expiryArray[0];
-  else  if (expiry===EXPIRY_TYPE.NEXT)
-     expiryDate=expiryArray[1];
-  else
-  {
-    const month=dayjs(expiryArray[0]).month();
-    expiryDate=expiryArray[0];
-    for (let i=1;i<10;i++)
-    {
-      if (!(month===dayjs(expiryArray[i]).month()))
-        {
-          expiryDate=expiryArray[i-1];
-          break;
-        }
-
+  const expiryArray = await getNiftyOptionExpiries()
+  let expiryDate: string
+  if (expiry === EXPIRY_TYPE.CURRENT) expiryDate = expiryArray[0]
+  else if (expiry === EXPIRY_TYPE.NEXT) expiryDate = expiryArray[1]
+  else {
+    const month = dayjs(expiryArray[0]).month()
+    expiryDate = expiryArray[0]
+    for (let i = 1; i < 10; i++) {
+      if (!(month === dayjs(expiryArray[i]).month())) {
+        expiryDate = expiryArray[i - 1]
+        break
+      }
     }
   }
 
-  const otmCEOptions=await getOTMOptions({nfoSymbol,
-    strike:pivotStrike,
-   instrumentType: "CE",
-    expiry:expiryDate
+  const otmCEOptions = await getOTMOptions({
+    nfoSymbol,
+    strike: pivotStrike,
+    instrumentType: "CE",
+    expiry: expiryDate,
   })
-  const otmPEOptions=await getOTMOptions({nfoSymbol,
-    strike:pivotStrike,
-   instrumentType: "PE",
-    expiry:expiryDate
+  const otmPEOptions = await getOTMOptions({
+    nfoSymbol,
+    strike: pivotStrike,
+    instrumentType: "PE",
+    expiry: expiryDate,
   })
 
-  const otmCEInstruments = 
-  otmCEOptions.map((row)=>
-    (
-    {
-      exchange: kite.EXCHANGE_NFO,
-      tradingSymbol: row.tradingsymbol
-    })
-    )
+  const otmCEInstruments = otmCEOptions.map(row => ({
+    exchange: kite.EXCHANGE_NFO,
+    tradingSymbol: row.tradingsymbol,
+  }))
 
-  const otmPEInstruments = 
-  otmPEOptions.map((row)=>
-    (
-    {
-      exchange: kite.EXCHANGE_NFO,
-      tradingSymbol: row.tradingsymbol
-    })
-    )
+  const otmPEInstruments = otmPEOptions.map(row => ({
+    exchange: kite.EXCHANGE_NFO,
+    tradingSymbol: row.tradingsymbol,
+  }))
 
+  //   await Promise.map(strikes, async strike => {
+  //     const tradingSymbolInterface= (await getExpiryTradingSymbol({
+  //       nfoSymbol,
+  //       strike,
+  //       instrumentType,
+  //       expiry
+  //     })) as TradingSymbolInterface
+  //     const tradingsymbol=tradingSymbolInterface?.tradingsymbol
+  //  logger.info(`[getTradingSymbolsByOptionPrice] Trading symbol is ${tradingsymbol}`)
+  //     return {
+  //       exchange: kite.EXCHANGE_NFO,
+  //       tradingSymbol: tradingsymbol
+  //     }
+  //   })
 
-//   await Promise.map(strikes, async strike => {
-//     const tradingSymbolInterface= (await getExpiryTradingSymbol({
-//       nfoSymbol,
-//       strike,
-//       instrumentType,
-//       expiry
-//     })) as TradingSymbolInterface
-//     const tradingsymbol=tradingSymbolInterface?.tradingsymbol
-//  console.log(`[getTradingSymbolsByOptionPrice] Trading symbol is ${tradingsymbol}`)
-//     return {
-//       exchange: kite.EXCHANGE_NFO,
-//       tradingSymbol: tradingsymbol
-//     }
-//   })
+  const otmCEPrices = await getMultipleInstrumentPrices(otmCEInstruments, user)
 
-  const otmCEPrices = await getMultipleInstrumentPrices(
-    otmCEInstruments,
-    user
-  );
-
-  const otmPEPrices = await getMultipleInstrumentPrices(
-    otmPEInstruments,
-    user
-  )
+  const otmPEPrices = await getMultipleInstrumentPrices(otmPEInstruments, user)
 
   const getStrike = inst => {
-    const withoutNfoSymbol = inst.replace(nfoSymbol, '')
+    const withoutNfoSymbol = inst.replace(nfoSymbol, "")
     const withoutExpiryDetails = withoutNfoSymbol.substr(5, 5)
     return Number(withoutExpiryDetails)
   }
 
   const CEformattedPrices: LTP_TYPE[] = otmCEInstruments.map(({ tradingSymbol }) => {
-    const { instrumentToken, lastPrice } = otmCEPrices[
-      tradingSymbol
-    ]
+    const { instrumentToken, lastPrice } = otmCEPrices[tradingSymbol]
     return {
       tradingsymbol: tradingSymbol,
       strike: getStrike(tradingSymbol),
       instrument_token: instrumentToken,
-      last_price: lastPrice
+      last_price: lastPrice,
     }
   })
 
   const PEformattedPrices: LTP_TYPE[] = otmPEInstruments.map(({ tradingSymbol }) => {
-    const { instrumentToken, lastPrice } = otmPEPrices[
-      tradingSymbol
-    ]
+    const { instrumentToken, lastPrice } = otmPEPrices[tradingSymbol]
     return {
       tradingsymbol: tradingSymbol,
       strike: getStrike(tradingSymbol),
       instrument_token: instrumentToken,
-      last_price: lastPrice
+      last_price: lastPrice,
     }
   })
-  
-  const CEInstrument:Partial<KITE_INSTRUMENT_INFO>=closest(price, CEformattedPrices, 'last_price', greaterThanEqualToPrice)
-  const PEInstrument:Partial<KITE_INSTRUMENT_INFO>=closest(price, PEformattedPrices, 'last_price', greaterThanEqualToPrice)
-return [CEInstrument,PEInstrument];
 
+  const CEInstrument: Partial<Instrument> = closest(
+    price,
+    CEformattedPrices,
+    "last_price",
+    greaterThanEqualToPrice
+  )
+  const PEInstrument: Partial<Instrument> = closest(
+    price,
+    PEformattedPrices,
+    "last_price",
+    greaterThanEqualToPrice
+  )
+  return [CEInstrument, PEInstrument]
 }
 
-
+/**
+ * Find trading symbols matching a target option price near a pivot strike.
+ */
 export const getTradingSymbolsByOptionPrice = async ({
   nfoSymbol,
   price,
@@ -1047,80 +953,78 @@ export const getTradingSymbolsByOptionPrice = async ({
   pivotStrike,
   user,
   greaterThanEqualToPrice = false,
-  expiry = EXPIRY_TYPE.CURRENT
-}: TRADING_SYMBOL_BY_OPTION_PRICE_TYPE):Promise<Partial<KITE_INSTRUMENT_INFO>> => {
+  expiry = EXPIRY_TYPE.CURRENT,
+}: TRADING_SYMBOL_BY_OPTION_PRICE_TYPE): Promise<Partial<Instrument>> => {
   const kite = syncGetKiteInstance(user)
   const totalStrikes = 61 // pivot and 30 on each side
   const { strikeStepSize } = INSTRUMENT_DETAILS[nfoSymbol!]
   const strikes = [...new Array(totalStrikes)]
     .map((_, idx) =>
-      idx === 0
-        ? idx
-        : idx < totalStrikes / 2
-        ? idx * -1
-        : idx - Math.floor(totalStrikes / 2)
+      idx === 0 ? idx : idx < totalStrikes / 2 ? idx * -1 : idx - Math.floor(totalStrikes / 2)
     )
     .map(idx => pivotStrike + idx * strikeStepSize)
     .sort((a, b) => a - b)
 
   const instruments = await Promise.map(strikes, async strike => {
-    const tradingSymbolInterface= (await getExpiryTradingSymbol({
+    const tradingSymbolInterface = (await getExpiryTradingSymbol({
       nfoSymbol,
       strike,
       instrumentType,
-      expiry
+      expiry,
     })) as TradingSymbolInterface
-    const tradingsymbol=tradingSymbolInterface?.tradingsymbol
- console.log(`[getTradingSymbolsByOptionPrice] Trading symbol is ${tradingsymbol}`)
+    const tradingsymbol = tradingSymbolInterface?.tradingsymbol
+    logger.info(`[getTradingSymbolsByOptionPrice] Trading symbol is ${tradingsymbol}`)
     return {
       exchange: kite.EXCHANGE_NFO,
-      tradingSymbol: tradingsymbol
+      tradingSymbol: tradingsymbol,
     }
   })
 
-  const priceDataByTradingSymbol = await getMultipleInstrumentPrices(
-    instruments,
-    user
-  )
+  const priceDataByTradingSymbol = await getMultipleInstrumentPrices(instruments, user)
 
   const getStrike = inst => {
-    const withoutNfoSymbol = inst.replace(nfoSymbol, '')
+    const withoutNfoSymbol = inst.replace(nfoSymbol, "")
     const withoutExpiryDetails = withoutNfoSymbol.substr(5, 5)
     return Number(withoutExpiryDetails)
   }
 
   const formattedPrices: LTP_TYPE[] = instruments.map(({ tradingSymbol }) => {
-    const { instrumentToken, lastPrice } = priceDataByTradingSymbol[
-      tradingSymbol
-    ]
+    const { instrumentToken, lastPrice } = priceDataByTradingSymbol[tradingSymbol]
     return {
       tradingsymbol: tradingSymbol,
       strike: getStrike(tradingSymbol),
       instrument_token: instrumentToken,
-      last_price: lastPrice
+      last_price: lastPrice,
     }
   })
 
-  return closest(price, formattedPrices, 'last_price', greaterThanEqualToPrice)
+  return closest(price, formattedPrices, "last_price", greaterThanEqualToPrice)
 }
 
-export function withoutFwdSlash (url: string): string {
-  if (url.endsWith('/')) {
+/**
+ * Remove trailing forward slash from a URL.
+ */
+export function withoutFwdSlash(url: string): string {
+  if (url.endsWith("/")) {
     return url.slice(0, url.length - 1)
   }
   return url
 }
 
-export const orclsodaUrl = `${ORCL_HOST_URL}/soda/latest`
+/**
+ * Return whether MOCK_ORDERS is enabled via environment.
+ */
+export const isMockOrder = () => MOCK_ORDERS
 
-export const isMockOrder = () =>
-  process.env.MOCK_ORDERS ? JSON.parse(process.env.MOCK_ORDERS) : false
-
+/**
+ * Return whether untested features are enabled via environment.
+ */
 export const isUntestedFeaturesEnabled = () =>
-  process.env.ENABLE_UNTESTED_FEATURES
-    ? JSON.parse(process.env.ENABLE_UNTESTED_FEATURES)
-    : false
+  process.env.ENABLE_UNTESTED_FEATURES ? JSON.parse(process.env.ENABLE_UNTESTED_FEATURES) : false
 
+/**
+ * Run a promise with a timeout and cancel it on timeout.
+ */
 export const finiteStateChecker = async (
   infinitePr: Bluebird<any>,
   checkDurationMs: number
@@ -1133,10 +1037,10 @@ export const finiteStateChecker = async (
   })
 }
 
-export const withRemoteRetry = async (
-  remoteFn: any,
-  timeoutMs = ms(60)
-): Promise<any> => {
+/**
+ * Retry a remote function until successful, with timeout and retry logic.
+ */
+export const withRemoteRetry = async (remoteFn: any, timeoutMs = ms(60)): Promise<any> => {
   const remoteFnExecution = () =>
     new Promise((resolve, reject, onCancel) => {
       let cancelled = false
@@ -1145,8 +1049,7 @@ export const withRemoteRetry = async (
           return false
         }
         try {
-          const isRemoteFnPromise =
-            remoteFn && typeof (remoteFn as any).then == 'function' // eslint-disable-line
+          const isRemoteFnPromise = remoteFn && typeof (remoteFn as any).then == "function" // eslint-disable-line
           const res = await (isRemoteFnPromise ? remoteFn : remoteFn())
           return res
         } catch (e) {
@@ -1156,7 +1059,12 @@ export const withRemoteRetry = async (
             }
           }
 
-          console.log(`withRemoteRetry attempt failed for ${remoteFn}`, e)
+          if (e?.error_type === "TokenException" || e?.error_type === "PermissionException") {
+            logger.error(`withRemoteRetry TokenException — api_key: ${KITE_API_KEY}`, e)
+            return reject(e)
+          }
+
+          logger.error(`withRemoteRetry attempt failed for ${remoteFn}`, e)
           await Promise.delay(ms(2))
           return fn()
         }
@@ -1178,6 +1086,9 @@ export const withRemoteRetry = async (
   return response
 }
 
+/**
+ * Poll broker order history until a desired order state is observed or rejected.
+ */
 export const orderStateChecker = (kite, orderId, ensureOrderState) => {
   /**
    * if broker responds back with order history,
@@ -1191,9 +1102,7 @@ export const orderStateChecker = (kite, orderId, ensureOrderState) => {
         return false
       }
       try {
-        const orderHistory = await withRemoteRetry(() =>
-          kite.getOrderHistory(orderId)
-        )
+        const orderHistory = await withRemoteRetry(() => kite.getOrderHistory(orderId))
         const byRecencyOrderHistory = orderHistory.reverse()
         // if it reaches here, then order exists in broker system
 
@@ -1205,23 +1114,18 @@ export const orderStateChecker = (kite, orderId, ensureOrderState) => {
           return expectedStateOrder
         }
 
-        console.log('🔴 [orderStateChecker] invalid state...', {
+        logger.error("🔴 [orderStateChecker] invalid state...", {
           orderId,
-          ensureOrderState
+          ensureOrderState,
         })
         logDeep(orderHistory)
 
         const wasOrderRejectedOrCancelled = byRecencyOrderHistory.find(
-          odr =>
-            odr.status === kite.STATUS_REJECTED ||
-            odr.status === kite.STATUS_CANCELLED
+          odr => odr.status === kite.STATUS_REJECTED || odr.status === kite.STATUS_CANCELLED
         )
 
         if (wasOrderRejectedOrCancelled) {
-          console.log(
-            '🔴 [orderStateChecker] rejected or cancelled',
-            byRecencyOrderHistory
-          )
+          logger.error("🔴 [orderStateChecker] rejected or cancelled", byRecencyOrderHistory)
           throw new Error(kite.STATUS_REJECTED)
         }
 
@@ -1229,11 +1133,11 @@ export const orderStateChecker = (kite, orderId, ensureOrderState) => {
         await Promise.delay(ms(2))
         return fn()
       } catch (e) {
-        console.log('🔴 [orderStateChecker] caught', e)
+        logger.error("🔴 [orderStateChecker] caught", e)
         if (
           e?.message === kite.STATUS_REJECTED ||
-          (e?.status === 'error' &&
-            e?.error_type === 'GeneralException' &&
+          (e?.status === "error" &&
+            e?.error_type === "GeneralException" &&
             e?.message === "Couldn't find that `order_id`.")
         ) {
           throw new Error(kite.STATUS_REJECTED)
@@ -1247,7 +1151,7 @@ export const orderStateChecker = (kite, orderId, ensureOrderState) => {
     fn()
       .then(resolve)
       .catch(e => {
-        console.log('🔴 [orderStateChecker] checker error', e)
+        logger.error("🔴 [orderStateChecker] checker error", e)
         if (e?.message === kite.STATUS_REJECTED) {
           reject(e)
         }
@@ -1272,6 +1176,9 @@ export const orderStateChecker = (kite, orderId, ensureOrderState) => {
  * { successful: false, response?: orderAckResponse }
  * which means order was placed, but its status couldn't be determined within `orderStatusCheckTimeout`
  * receiving `false` is a tricky situation to be in - and it shouldn't happen in an ideal world
+ */
+/**
+ * Place an order and ensure it reaches an ultimate state (or retry/handle failures).
  */
 export const remoteOrderSuccessEnsurer = async (args: {
   _kite?: Record<string, unknown>
@@ -1298,101 +1205,87 @@ export const remoteOrderSuccessEnsurer = async (args: {
     remoteRetryTimeout = ms(60),
     user,
     instrument,
-    attemptCount = 0
+    attemptCount = 0,
   } = args
 
   if (attemptCount >= retryAttempts) {
-    console.log(
-      '🔴 [remoteOrderSuccessEnsurer] all attempts exhausted. Terminating!'
-    )
+    logger.error("🔴 [remoteOrderSuccessEnsurer] all attempts exhausted. Terminating!")
     throw Promise.TimeoutError
   }
 
   if (attemptCount > 0) {
     await Promise.delay(onFailureRetryAfterMs)
-    console.log({ attemptCount: attemptCount + 1, retryAttempts })
+    logger.info("retry attempt", { attemptCount: attemptCount + 1, retryAttempts })
   }
 
-  const {data:{items}}= await axios(
-    `${orclsodaUrl}/dailyplan?q={"orderTag": "${orderProps.tag!}"}`)
+  const dbTradeRows = await db
+    .select({ userOverride: jobExecutions.userOverride })
+    .from(jobExecutions)
+    .where(eq(jobExecutions.orderTag, orderProps.tag!))
 
-const tradeSettings=items.map(items=>{
-return ({...items.value,id:items.id})
-});
-
-
-  const { user_override: userOverride } = tradeSettings
+  const userOverride = dbTradeRows[0]?.userOverride
   if (userOverride === USER_OVERRIDE.ABORT) {
-    console.log(
-      '🔴 [remoteOrderSuccessEnsurer] user override ABORT. Terminating!'
-    )
+    logger.error("🔴 [remoteOrderSuccessEnsurer] user override ABORT. Terminating!")
     throw Error(USER_OVERRIDE.ABORT)
   }
 
-  const kite = _kite ?? syncGetKiteInstance(user)
+  const kite = (_kite ?? syncGetKiteInstance(user)) as any
 
   const { freezeQty } = INSTRUMENT_DETAILS[instrument]
   if (orderProps.quantity! > freezeQty) {
     // if more than freeze quantity, split quantity into freezeQty orders
     const ordersCount = Math.ceil(orderProps.quantity! / freezeQty)
-    const freezeQtyOrders = [...new Array(ordersCount).fill(null)].map(
-      (_, idx) => {
-        if (idx === ordersCount - 1) {
-          // last order with qty <= freezeQty
-          return {
-            ...orderProps,
-            quantity: orderProps.quantity! - idx * freezeQty
-          }
-        }
+    const freezeQtyOrders = [...new Array(ordersCount).fill(null)].map((_, idx) => {
+      if (idx === ordersCount - 1) {
+        // last order with qty <= freezeQty
         return {
           ...orderProps,
-          quantity: freezeQty
+          quantity: orderProps.quantity! - idx * freezeQty,
         }
       }
-    )
+      return {
+        ...orderProps,
+        quantity: freezeQty,
+      }
+    })
 
     const orderResults: any = await allSettled(
       freezeQtyOrders.map(order =>
         remoteOrderSuccessEnsurer({
           ...args,
-          orderProps: order
+          orderProps: order,
         })
       )
     )
 
     const isSuccessful = orderResults.every(
-      orderResult =>
-        orderResult.status === 'fulfilled' && orderResult.value?.successful
+      orderResult => orderResult.status === "fulfilled" && orderResult.value?.successful
     )
 
     return {
       successful: isSuccessful,
       response: orderResults
         .map(orderResult =>
-          orderResult.status === 'fulfilled' && orderResult.value?.successful
+          orderResult.status === "fulfilled" && orderResult.value?.successful
             ? orderResult.value.response
             : null
         )
         .filter(o => o)
-        .reduce((accum, ordersArr) => [...accum, ...ordersArr], [])
+        .reduce((accum, ordersArr) => [...accum, ...ordersArr], []),
     }
   }
 
   try {
     const mockOrders = isMockOrder()
     if (mockOrders) {
-      console.log('mock order', orderProps)
+      logger.info("mock order", orderProps)
     }
-    console.log(`[remoteOrderSuccessEnsurer] Order details are ${JSON.stringify(orderProps)}`)
+    logger.info(`[remoteOrderSuccessEnsurer] Order details are ${JSON.stringify(orderProps)}`)
     const orderAckResponse = mockOrders
-      ? { order_id: '' }
-      : await kite.placeOrder(kite.VARIETY_REGULAR, orderProps)
+      ? { order_id: "" }
+      : await kitePlaceOrder(kite, kite.VARIETY_REGULAR, orderProps as PlaceOrderParams)
     const { order_id: ackOrderId } = orderAckResponse
-    const isOrderInUltimateStatePr = orderStateChecker(
-      kite,
-      ackOrderId,
-      ensureOrderState
-    )
+    const isOrderInUltimateStatePr = orderStateChecker(kite, ackOrderId, ensureOrderState)
     try {
       const ultimateStateOrder = await finiteStateChecker(
         isOrderInUltimateStatePr,
@@ -1400,46 +1293,48 @@ return ({...items.value,id:items.id})
       )
       return {
         successful: true,
-        response: [ultimateStateOrder]
+        response: [ultimateStateOrder],
       }
     } catch (e) {
       // should only reach here if it had a rejected status or finiteStateChecker timedout
-      console.log('🔴 [remoteOrderSuccessEnsurer] caught', e)
+      logger.error("🔴 [remoteOrderSuccessEnsurer] caught", e)
       if (e instanceof Promise.TimeoutError) {
         return {
           successful: false,
-          response: [orderAckResponse]
+          response: [orderAckResponse],
         }
       }
       if (e?.message === kite.STATUS_REJECTED) {
-        console.log(
-          '🟢 [remoteOrderSuccessEnsurer] retrying rejected order',
-          orderProps
-        )
+        logger.info("🟢 [remoteOrderSuccessEnsurer] retrying rejected order", orderProps)
         return remoteOrderSuccessEnsurer({
           ...args,
-          attemptCount: attemptCount + 1
+          attemptCount: attemptCount + 1,
         })
       }
       throw e
     }
   } catch (e) {
     // will reach here if kite.placeOrder fails with some error
-    console.log('🔴 [remoteOrderSuccessEnsurer] placeOrder failed?', e)
+    logger.error("🔴 [remoteOrderSuccessEnsurer] placeOrder failed?", e)
+
+    // Non-retryable errors should be thrown immediately
     if (
-      e?.status === 'error' &&
-      (e?.error_type === 'NetworkException' ||
-        e?.error_type === 'OrderException' ||
-        e?.error_type === 'InputException')
+      e?.status === "error" &&
+      (e?.error_type === "PermissionException" || e?.error_type === "InputException")
+    ) {
+      logger.error("🔴 [remoteOrderSuccessEnsurer] non-retryable error", e?.error_type)
+      throw e
+    }
+
+    if (
+      e?.status === "error" &&
+      (e?.error_type === "NetworkException" || e?.error_type === "OrderException")
     ) {
       // we cannot simply retry - don't know where the request failed inflight
       // check at the broker's end - if the order exists with that tag or not
 
       try {
-        const orders = await withRemoteRetry(
-          () => kite.getOrders(),
-          remoteRetryTimeout
-        )
+        const orders = await withRemoteRetry(() => kite.getOrders(), remoteRetryTimeout)
         const matchedOrder = orders.find(
           order =>
             order.tag === orderProps.tag &&
@@ -1455,7 +1350,7 @@ return ({...items.value,id:items.id})
           // so reattempt the order
           return remoteOrderSuccessEnsurer({
             ...args,
-            attemptCount: attemptCount + 1
+            attemptCount: attemptCount + 1,
           })
         }
 
@@ -1473,124 +1368,64 @@ return ({...items.value,id:items.id})
           )
           return {
             successful: true,
-            response: [ultimateStateOrder]
+            response: [ultimateStateOrder],
           }
         } catch (e) {
           if (e?.message === kite.STATUS_REJECTED) {
             return remoteOrderSuccessEnsurer({
               ...args,
-              attemptCount: attemptCount + 1
+              attemptCount: attemptCount + 1,
             })
           }
           throw e
         }
       } catch (e) {
         // case - tried getting orders for 1 min, but no response from broker
-        console.log(
-          '🔴 [remoteOrderSuccessEnsurer] caught with no response from broker',
-          e
-        )
+        logger.error("🔴 [remoteOrderSuccessEnsurer] caught with no response from broker", e)
         return { successful: false }
       }
     }
 
-    console.log('🔴 [remoteOrderSuccessEnsurer] unhandled parent caught', e)
+    logger.error("🔴 [remoteOrderSuccessEnsurer] unhandled parent caught", e)
     return { successful: false }
   }
 }
 
-
 // gets the current data from DB
-export const getValuesfromDB = async (
-    id:string
-): Promise<Record<string, unknown>> => {
-    const endpoint = `${orclsodaUrl}/dailyplan/${id}`
-  
-    const { data } = await axios(endpoint)
-    return data
-  }
-// puts the value to DB
-export const putValuestoDb = async (
-    id:string,
-    data:any
-) => {
-    const endpoint = `${orclsodaUrl}/dailyplan/${id}`
-  
-    await axios.put(
-        endpoint,
-        data
-      )
-    
-  }
-// patches and returns stale data
+/**
+ * Fetch job execution values from DB by id.
+ */
+export const getValuesfromDB = async (id: string): Promise<Record<string, unknown> | null> => {
+  const rows = await db.select().from(jobExecutions).where(eq(jobExecutions.id, id))
+  return rows[0] ?? null
+}
+
+/**
+ * Patch a DB trade row using drizzle-backed helper.
+ */
 export const patchDbTrade = async ({
   id,
-  patchProps
+  patchProps,
 }: {
   id: string
-  patchProps: Record<string, unknown>
+  patchProps: Parameters<typeof patchDbTradeFromDb>[1]
 }): Promise<Record<string, unknown>> => {
-  const endpoint = `${orclsodaUrl}/dailyplan/${id}`
-
-  const { data } = await axios(endpoint)
-  await axios.put(
-    endpoint,
-    {
-      ...data,
-      ...patchProps
-    }
-  )
-
-  return data
+  return patchDbTradeFromDb(id, patchProps)
 }
+
 /*
 Points: sell - buy
 Quantity: Sell is positive, buy is negative similar to kite positions
+DEPRECATED: Use kiteUtils.getCompletedOrdersbyTag instead - moved to kiteUtils.ts
 */
-export const getCompletedOrdersbyTag= async(orderTag:string,kite:any):
-Promise<COMPLETED_BY_TAG[]>=>
-{
+/**
+ * Alias for kiteUtils.getCompletedOrdersbyTag.
+ */
+export const getCompletedOrdersbyTag = getCompletedOrdersbyTagFromKite
 
-  const orders = await withRemoteRetry(
-    () => kite.getOrders()
-  )
-  
- const pendingorders= orders.filter(order=>(order.status==='COMPLETE' && order.tag===orderTag))
- .reduce((prev:{[key: string]: {
-  points:number,
-  quantity:number
-}}, curr) =>
-  {
-    if (!prev[curr.tradingsymbol])
-     {
-         prev[curr.tradingsymbol]={
-             "points":curr.transaction_type==='SELL'?curr.average_price:-1*curr.average_price,
-             "quantity":curr.transaction_type==='SELL'?-1*curr.quantity:curr.quantity
-         }
-     }
-     else
-     {
-        prev[curr.tradingsymbol].points+=curr.transaction_type==='SELL'?curr.average_price:-1*curr.average_price;
-        prev[curr.tradingsymbol].quantity+=curr.transaction_type==='SELL'?-1*curr.quantity:curr.quantity; 
-     }
-     return prev;
-
-     } ,{}
-  )
-  const completeOrdersBytag:COMPLETED_BY_TAG[]=Object.keys(pendingorders).map
-  (key=>
-  { return {
-      "tradingsymbol":key,
-      "quantity":pendingorders[key].quantity,
-      "points":pendingorders[key].points
-    }
-  }
-    )
-  /* console.log(`[getCompletedOrdersbyTag] completedOrders by tag are`, completeOrdersBytag) */
-    return completeOrdersBytag;
-
-    }
-
+/**
+ * Attempt multiple broker orders in parallel and return aggregated success state.
+ */
 export const attemptBrokerOrders = async (
   ordersPr: Array<Promise<any>>
 ): Promise<{
@@ -1601,62 +1436,58 @@ export const attemptBrokerOrders = async (
     const brokerOrderResolutions = await allSettled(ordersPr)
     logDeep(brokerOrderResolutions)
     const rejectedLegs = (brokerOrderResolutions as any).filter(
-      (res: allSettledInterface) => res.status === 'rejected'
+      (res: allSettledInterface) => res.status === "rejected"
     )
-    const successfulOrders: Array<
-      KiteOrder | null
-    > = (brokerOrderResolutions as any)
+    const successfulOrders: Array<KiteOrder | null> = (brokerOrderResolutions as any)
       .map((res: allSettledInterface) =>
-        res.status === 'fulfilled' && res.value.successful
-          ? res.value.response
-          : null
+        res.status === "fulfilled" && res.value.successful ? res.value.response : null
       )
       .filter(o => o)
-      .reduce(
-        (flattenedOrders, ordersArr) => [...flattenedOrders, ...ordersArr],
-        []
-      )
+      .reduce((flattenedOrders, ordersArr) => [...flattenedOrders, ...ordersArr], [])
 
     if (rejectedLegs.length > 0) {
       return {
         allOk: false,
-        statefulOrders: successfulOrders as KiteOrder[]
+        statefulOrders: successfulOrders as KiteOrder[],
       }
     }
 
     return {
       allOk: true,
-      statefulOrders: successfulOrders as KiteOrder[]
+      statefulOrders: successfulOrders as KiteOrder[],
     }
   } catch (e) {
-    console.log('🔴 [attemptBrokerOrders] error', e)
+    logger.error("🔴 [attemptBrokerOrders] error", e)
     return {
       allOk: false,
-      statefulOrders: []
+      statefulOrders: [],
     }
   }
 }
 
+/**
+ * Get the tradingsymbol used to hedge a given strike with distance and type.
+ */
 export const getHedgeForStrike = async ({
   strike,
   distance,
   type,
   nfoSymbol,
-  expiryType = EXPIRY_TYPE.CURRENT
+  expiryType = EXPIRY_TYPE.CURRENT,
 }: {
   strike: number
   distance: number
   type: string
   nfoSymbol: string
   expiryType: EXPIRY_TYPE
-}): Promise<string|undefined> => {
-  const hedgeStrike = strike + distance * (type === 'PE' ? -1 : 1)
+}): Promise<string | undefined> => {
+  const hedgeStrike = strike + distance * (type === "PE" ? -1 : 1)
 
   const { tradingsymbol } = (await getExpiryTradingSymbol({
     nfoSymbol,
     strike: hedgeStrike,
     instrumentType: type,
-    expiry: expiryType
+    expiry: expiryType,
   })) as TradingSymbolInterface
 
   return tradingsymbol
@@ -1668,13 +1499,16 @@ export interface apiResponseObject {
   StrikePrice: number
 }
 
+/**
+ * Map option deltas to strike objects from API response, optionally filtering by type.
+ */
 export const getStrikeByDelta = (
   delta: number,
   apiResponse: {
     atmStrike: number
     data: apiResponseObject[]
   },
-  type?: 'PE' | 'CE'
+  type?: "PE" | "CE"
 ):
   | apiResponseObject
   | {
@@ -1682,44 +1516,28 @@ export const getStrikeByDelta = (
       callStrike: apiResponseObject
     } => {
   const { data } = apiResponse
-  const putStrike = closest(delta, data, 'PutDelta', false)
-  const callStrike = closest(delta, data, 'CallDelta', false)
-  if (type === 'PE') {
+  const putStrike = closest(delta, data, "PutDelta", false)
+  const callStrike = closest(delta, data, "CallDelta", false)
+  if (type === "PE") {
     return putStrike
   }
 
-  if (type === 'CE') {
+  if (type === "CE") {
     return callStrike
   }
 
   return {
     putStrike,
-    callStrike
+    callStrike,
   }
 }
 
-export function round (value: number, step = 0.5): number {
+/**
+ * Round `value` to the nearest `step` increment.
+ */
+export function round(value: number, step = 0.5): number {
   const inv = 1.0 / step
   return Math.round(value * inv) / inv
 }
 
-export async function cleanupTradesAndAccessToken()
-{
-  await redisConnection.hdel(QID,ACCESSTOKEN) ;
-  await redisConnection.hdel(QID,TRADES) ;
-}
-
-export async function storeAccessTokeninRedis(access_token:string):Promise<void>
-{
-  await redisConnection.hset(QID,ACCESSTOKEN,access_token) 
-}
-
-export const checksameTokeninRedis = async (access_token: string):Promise<boolean> => {
-  const currentToken:string|null=await redisConnection.hget(QID,ACCESSTOKEN);
-  if (currentToken===access_token)
-  {
-    return true;
-  }
-  else 
-    return false;
-  }
+export { getIndexInstruments }

@@ -2,118 +2,145 @@
 
 SignalX is a trading app for anyone looking to diversify their funds into systematic and algorithmic intraday trading strategies.
 
-✅ Read everything about SignalX [here](https://signalx.club). 
+## Prerequisites
 
-Once you've gone through the Notion doc above, come back here for instructions to setup SignalX!
-**If you're migrating from Aakash's SignalX, please follow the instructions [here](https://sunrise-flier-24f.notion.site/Steps-to-migrate-from-Aakash-s-SignalX-to-kha-ching-d714d8d0c41443d0a756961b9a3316e2)**
+1. **Kite Connect** — Go to https://kite.trade and sign up. Create an app and pay Zerodha the ₹500/month fee.
+   - Copy the `API Key` and `API Secret` — you'll need them for environment variables.
+   - Set the **Redirect URL** to `https://<your-vps-domain>/api/redirect_url_kite` after deployment.
 
-## Setup Prerequisites:
+2. **VPS** — A Linux VPS (Ubuntu 22.04+ recommended) with at least 1 vCPU and 1 GB RAM.
 
-1. [Sign up on DigitalOcean using this link](https://m.do.co/c/d9db955b428e). You'd receive $100 in new signup credits valid for 2 months. Running this app costs $10/month. So you'd be able to run it FREE for first 2 months.
+3. **Node.js** — v20+ (use [nvm](https://github.com/nvm-sh/nvm) to install).
 
-2) Goto https://kite.trade and sign up for Kite Connect. Create an app and pay Zerodha the ₹500/month fee.
+4. **Yarn** — v4 (`npm install -g yarn`).
 
-   - Ignore the `Redirect URL` and `Postback URL` fields for now.
-   - Copy `API Key` and `API Secret` fields and keep them handy somewhere.
+5. **PostgreSQL 16** — Install on the VPS:
+   ```bash
+   sudo apt install -y postgresql-16
+   sudo -u postgres psql -c "CREATE DATABASE trading_db;"
+   sudo -u postgres psql -c "CREATE USER trading_user WITH PASSWORD 'yourpassword';"
+   sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE trading_db TO trading_user;"
+   ```
 
-3) Goto https://redislabs.com/try-free/ and sign up for a "Cloud" redis account.
+6. **Redis 7** — Install on the VPS:
+   ```bash
+   sudo apt install -y redis-server
+   sudo systemctl enable redis-server
+   sudo systemctl start redis-server
+   ```
 
-   - Activate your database and name it `signalx`
-   - Copy the `Endpoint` and `User Password` fields to construct the following Redis URL - `redis://:{User Password}@{Endpoint}`. Keep this handy. (remove the curly braces)
-4) Go to cloud.oracle.com and sign up for free Oracle Autonomous DB. You can follow the instructions  [here](https://github.com/anil1kuppa/oci_cs_adb). Unlike SignalX, this uses free Oracle cloud database.
+7. **Grafana Cloud** (optional, for observability) — Sign up at https://grafana.com/products/cloud/. Navigate to **Connections → OpenTelemetry** to get your OTLP endpoint and API token.
 
-_Update - Redislabs free tier drops connections very often. Recommend upgrading to a paid tier for a seamless trading experience._
+---
 
-## 1-click Installation
+## Setup
 
-Deploy the application on DigitalOcean's (DO) apps platform.
+### 1. Clone and install dependencies
 
-[![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://anil1kuppa/kha-ching/tree/master&refcode=50a17c5480fb)
-## Environment variables
+```bash
+git clone https://github.com/anil1kuppa/kha-ching.git
+cd kha-ching
+yarn install
+```
 
-> Environment variables are private setting variables that configures this application to run on your Zerodha account.
+### 2. Configure environment variables
 
-#### `KITE_API_KEY`
+Copy the example env file and fill in your values:
 
-Paste the Kite API key that you copied from Step #1. Ensure to tick `Encrypt`.
+```bash
+cp .env.example .env
+```
 
-#### `KITE_API_SECRET`
+Refer to [.env.example](.env.example) for all available variables and their descriptions. Key variables to set:
 
-Paste the Kite Secret key that you copied from Step #1. Ensure to tick `Encrypt`.
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string, e.g. `postgresql://trading_user:yourpassword@localhost:5432/trading_db` |
+| `REDIS_URL` | Redis URL, e.g. `redis://127.0.0.1:6379` |
+| `KITE_API_KEY` | Your Kite Connect API key |
+| `KITE_API_SECRET` | Your Kite Connect API secret |
+| `SECRET_COOKIE_PASSWORD` | Random 32+ character string for session encryption |
+| `TZ` | Must be `Asia/Kolkata` |
+| `MOCK_ORDERS` | Set `true` during testing — skips real order placement |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Grafana Cloud OTLP endpoint (optional) |
+| `OTEL_EXPORTER_OTLP_HEADERS` | Grafana Cloud auth header (optional) |
 
-#### `SECRET_COOKIE_PASSWORD`
+### 3. Apply database migrations
 
-This **must** be a 32 digit alphanumeric string. Generate a 32 digit password from here - https://1password.com/password-generator/. Ensure to tick `Encrypt`.
+```bash
+yarn drizzle:push
+```
 
-#### `REDIS_URL`
+### 4. Build and start
 
-Paste the Redis URL generated from Step #2. Ensure to tick `Encrypt`.
+```bash
+yarn build
+yarn start
+```
 
-#### `MOCK_ORDERS`
+The app runs on port `3000` by default. Use a reverse proxy (nginx, Caddy) to expose it over HTTPS.
 
-Set it to `true` if you'd simulate orders but not actually place them on Zerodha. Comes in handy if you're looking to develop this application locally. Ignore it otherwise.
+---
 
-#### `NEXT_PUBLIC_DEFAULT_LOTS`
+## Running with Docker Compose
 
-Default lots that you trade on a regular basis. This is only the default initial value in the form and is changeable before taking the trade.
+If you prefer running everything via Docker (app + Postgres + Redis + OTEL Collector):
 
-for e.g. If you regularly trade `150` quantity of Nifty Options, you'd enter `2` lots here.
+```bash
+cp .env.example .env   # fill in your values
+COMPOSE_PROFILES=local docker compose up
+```
 
-#### `NEXT_PUBLIC_DEFAULT_SKEW_PERCENT`
+This spins up `postgres:16-alpine`, `redis:7-alpine`, an OTEL Collector, and the app. The app health-check endpoint is `GET /api/health`.
 
-Default skew that you're okay with when selling straddles. Anywhere between 5-15 is a good value. The value here only serves as a default and can be changed before setting up daily trades.
+---
 
-#### `NEXT_PUBLIC_DEFAULT_SQUARE_OFF_TIME`
+## Environment Variables Reference
 
-Default square off time of the strategy. The value here only serves as a default and can be changed per strategy during the strategy setup when taking daily trades. Format is 24 hours hh:mm. i.e. enter `15:20` as value if you mean 3.20pm.
+See [.env.example](.env.example) for the full list of environment variables with inline documentation.
 
-#### `NEXT_PUBLIC_APP_URL`
+### `NEXT_PUBLIC_DEFAULT_LOTS`
+Default lots pre-filled in the trade form. For example, `2` lots if you regularly trade 150 quantity of Nifty options.
 
-Enter `${APP_URL}` here or leave this value as it is if you're doing a fresh setup as the value will be correctly prefilled for you.
+### `NEXT_PUBLIC_DEFAULT_SKEW_PERCENT`
+Allowed skew (% difference between CE and PE premiums) before entering a straddle. 5–15 is a good range.
 
-#### `ORCL_HOST_URL`
+**Skew retry behavior:** Before entering a straddle, the app checks whether the live skew is within the threshold. If too high, it retries every 2 seconds. The allowed skew threshold widens dynamically over time:
+- While more than 50% of the window remains → use `maxSkewPercent`
+- After 50% of time has elapsed → blend linearly toward `thresholdSkewPercent`
+- If the window expires → trade is taken regardless of skew if `takeTradeIrrespectiveSkew` is enabled, otherwise cancelled
 
-[Follow the guide here](https://github.com/anil1kuppa/oci_cs_adb) to create Oracle autonomous DB.
+### `NEXT_PUBLIC_DEFAULT_SQUARE_OFF_TIME`
+Default square-off time in 24-hour `hh:mm` format, e.g. `15:20` for 3:20 PM.
 
+### `NEXT_PUBLIC_DEFAULT_SLM_PERCENT`
+Default SLM BUY order percentage placed after an initial order fills. Changeable per trade during setup.
 
-#### `NEXT_PUBLIC_DEFAULT_SLM_PERCENT`
+---
 
-Default percent of SLM BUY orders to be placed after initial order goes through. The value here only serves as a default and can be changed before setting up daily trades.
+## Development
 
-#### `NEXT_PUBLIC_GIT_HASH`
+```bash
+yarn dev    # starts dev server with OTEL instrumentation
+```
 
-Leave the value in this field as it-is. This'll inform if there's an app update available in the app UI. If there's an update available, you can hit the "Deploy" button in your DigitalOcean app to install the new build for yourself.
+Open [http://localhost:3000](http://localhost:3000) in your browser. Set `MOCK_ORDERS=true` to avoid placing real orders during development.
 
-## Next Steps
+```bash
+yarn test       # all tests
+yarn unit-test  # unit tests only
+yarn int-test   # integration tests (requires running Postgres + Redis)
+```
 
-- DigitalOcean Step 2: After entering all environment variables in setup Step 1, proceed to the next step and select `Bangalore` as region.
-- DigitalOcean Step 3: Select `$5/mo` container size from the `Basic size` dropdown. Ensure you see `$5` as the `Monthy App Cost`.
-- Click on `Launch Basic App`.
-- Give it 5mins, let the application get build.
-- Once successfully built, Goto `Settings` of this app, and copy the URL where DigitalOcean hosted this application for you.
-- Go back to the [kite app](https://kite.trade/), and now enter Redirect URL as follows: `{url_from_digitalocean}/api/redirect_url_kite`. It should look something like this https://qwe-qwerty-gex5y.ondigitalocean.app/api/redirect_url_kite (only an example - yours will differ). Press `Save`!
-
-## Using the application
-
-- Bookmark the URL, or save it to your homescreen. You'd need it every trading day!
-- Zerodha automatically expires the authentication token required to access the APIs at around 7.35am. You're required to login to this app every day after 7.45am to generate a new access token.
-- Once logged in, you'd need to setup your trades for the day. **This needs to be done everyday!**. _Trades setup after market hours will fail the next day as the API access token would have expired._
+---
 
 ## Data and Security
 
-- All access tokens are saved via a first-party cookie in your browser and are encrypted via the `SECRET_COOKIE_PASSWORD` environment variable. Whatever you do, **DO NOT** share this with anyone!
-- Redis is used for scheduling the tasks or running them on spot. **DO NOT** share your redis URL with anyone as it contains your Zerodha profile details alongwith API access tokens.
+- All access tokens are saved in encrypted session cookies via `SECRET_COOKIE_PASSWORD`. **Do not share this value with anyone.**
+- Redis stores job queues and scheduling data including Zerodha profile details. **Do not expose your Redis URL.**
+- Zerodha tokens expire around 7:35 AM IST daily — log in to the app each morning after 7:45 AM to refresh.
 
-## Develop locally
-
-In case you'd like to contribute, you can run the development server like so
-
-```bash
-pnpm build
-pnpm dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
 ## License
 

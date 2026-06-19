@@ -1,58 +1,58 @@
-import axios from 'axios'
-import { getNearestContract } from '../../lib/strategies/strangle'
+import axios from "axios"
+import { getNearestContract } from "../../lib/strategies/strangle"
 import {
   getMultipleInstrumentPrices,
   getStrikeByDelta,
-  getTradingSymbolsByOptionPrice
-} from '../../lib/utils'
+  getTradingSymbolsByOptionPrice,
+} from "../../lib/utils"
 
 const user = JSON.parse(process.env.USER_SESSION)
 
-test('it should fetch strikes by delta', async () => {
+test("it should fetch strikes by delta", async () => {
   const { data } = await axios.post(
-    'https://indicator.signalx.trade/api/data/option_chain',
+    "https://indicator.signalx.trade/api/data/option_chain",
     {
-      instrument: 'NIFTY',
-      contract: '18AUG2021'
+      instrument: "NIFTY",
+      contract: "18AUG2021",
     },
     {}
   )
   const strikes = getStrikeByDelta(15, data)
   console.log(strikes)
-  expect(strikes).toHaveProperty('callStrike')
-  expect(strikes).toHaveProperty('putStrike')
+  expect(strikes).toHaveProperty("callStrike")
+  expect(strikes).toHaveProperty("putStrike")
 })
 
-test('it should get nearest expiry contract', async () => {
-  const res = await getNearestContract(16500, 'NIFTY')
-  const contract = res.format('DDMMMYYYY')
+test("it should get nearest expiry contract", async () => {
+  const res = await getNearestContract(16500, "NIFTY")
+  const contract = res.format("DDMMMYYYY")
   console.log(contract)
   expect(contract).toBeDefined()
 })
 
-test('it should return ltp of multiple instruments', async () => {
+test("it should return ltp of multiple instruments", async () => {
   const instruments = [
     {
-      exchange: 'NFO',
-      tradingSymbol: 'NIFTY21AUG16500CE'
+      exchange: "NFO",
+      tradingSymbol: "NIFTY21AUG16500CE",
     },
     {
-      exchange: 'NFO',
-      tradingSymbol: 'NIFTY21AUG16500PE'
-    }
+      exchange: "NFO",
+      tradingSymbol: "NIFTY21AUG16500PE",
+    },
   ]
   const res = await getMultipleInstrumentPrices(instruments, user)
   console.log(res)
   expect(res).toBeDefined()
 })
 
-test('it should get tradingsymbol by closest price', async () => {
+test("it should get tradingsymbol by closest price", async () => {
   const res = await getTradingSymbolsByOptionPrice({
-    nfoSymbol: 'BANKNIFTY',
+    nfoSymbol: "BANKNIFTY",
     price: 200,
-    instrumentType: 'CE',
+    instrumentType: "CE",
     pivotStrike: 35000,
-    user
+    user,
   })
   console.log(res)
   expect(res).toBeDefined()

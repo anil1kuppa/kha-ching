@@ -1,0 +1,982 @@
+{
+  "id": "c195ce13-bc4d-4281-99c9-efbfaaf2db1c",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.accesstoken": {
+      "name": "accesstoken",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "access_token": {
+          "name": "access_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.chase_log": {
+      "name": "chase_log",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "byDefault",
+            "name": "chase_log_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tradingsymbol": {
+          "name": "tradingsymbol",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "transaction_type": {
+          "name": "transaction_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "average_price": {
+          "name": "average_price",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.chase_status": {
+      "name": "chase_status",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "last_modified_at": {
+          "name": "last_modified_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "current_status": {
+          "name": "current_status",
+          "type": "chase_status_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tradingsymbol": {
+          "name": "tradingsymbol",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "instrument_token": {
+          "name": "instrument_token",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stoploss": {
+          "name": "stoploss",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "entry_point": {
+          "name": "entry_point",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_signal_breaching_tolerance": {
+          "name": "is_signal_breaching_tolerance",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.ema": {
+      "name": "ema",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "tradingsymbol": {
+          "name": "tradingsymbol",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ema": {
+          "name": "ema",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "instrument_token": {
+          "name": "instrument_token",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "highest_high": {
+          "name": "highest_high",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lowest_low": {
+          "name": "lowest_low",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_close": {
+          "name": "last_close",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.job_executions": {
+      "name": "job_executions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "job_execution_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "instrument": {
+          "name": "instrument",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "strategy": {
+          "name": "strategy",
+          "type": "job_execution_strategy",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "exit_strategy": {
+          "name": "exit_strategy",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "combined_exit_strategy": {
+          "name": "combined_exit_strategy",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expiry_type": {
+          "name": "expiry_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "product_type": {
+          "name": "product_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "volatility_type": {
+          "name": "volatility_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sl_order_type": {
+          "name": "sl_order_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "order_tag": {
+          "name": "order_tag",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lots": {
+          "name": "lots",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "slm_percent": {
+          "name": "slm_percent",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sl_limit_price_percent": {
+          "name": "sl_limit_price_percent",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_profit_points": {
+          "name": "max_profit_points",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_loss_points": {
+          "name": "max_loss_points",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "current_points": {
+          "name": "current_points",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trailing_sl_percent": {
+          "name": "trailing_sl_percent",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trailing_max_profit_points": {
+          "name": "trailing_max_profit_points",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trailing_max_loss_points": {
+          "name": "trailing_max_loss_points",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trail_every_pct_change_value": {
+          "name": "trail_every_pct_change_value",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "threshold_skew_percent": {
+          "name": "threshold_skew_percent",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_skew_percent": {
+          "name": "max_skew_percent",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expire_if_unsuccessful_in_mins": {
+          "name": "expire_if_unsuccessful_in_mins",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_max_profit_enabled": {
+          "name": "is_max_profit_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "is_max_loss_enabled": {
+          "name": "is_max_loss_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "is_auto_square_off_enabled": {
+          "name": "is_auto_square_off_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "take_trade_irrespective_skew": {
+          "name": "take_trade_irrespective_skew",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "on_square_off_set_aborted": {
+          "name": "on_square_off_set_aborted",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "run_now": {
+          "name": "run_now",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "square_off_time": {
+          "name": "square_off_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "run_at": {
+          "name": "run_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_target_at": {
+          "name": "last_target_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_modified": {
+          "name": "last_modified",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "auto_square_off_props": {
+          "name": "auto_square_off_props",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "queue": {
+          "name": "queue",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "auto_square_off_time": {
+          "name": "auto_square_off_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "auto_square_off_delete_pending_orders": {
+          "name": "auto_square_off_delete_pending_orders",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "day_of_week": {
+          "name": "day_of_week",
+          "type": "day_of_week_enum",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trail_every_percentage_change_value": {
+          "name": "trail_every_percentage_change_value",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "plan_ref": {
+          "name": "plan_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "user_override": {
+          "name": "user_override",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "live_trailing_sl": {
+          "name": "live_trailing_sl",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_trailing_sl_set_at": {
+          "name": "last_trailing_sl_set_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_heartbeat_at": {
+          "name": "last_heartbeat_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "job_executions_plan_ref_trade_plans_id_fk": {
+          "name": "job_executions_plan_ref_trade_plans_id_fk",
+          "tableFrom": "job_executions",
+          "tableTo": "trade_plans",
+          "columnsFrom": [
+            "plan_ref"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.trade_plans": {
+      "name": "trade_plans",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "strategy": {
+          "name": "strategy",
+          "type": "job_execution_strategy",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "instrument": {
+          "name": "instrument",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expiry_type": {
+          "name": "expiry_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "product_type": {
+          "name": "product_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "day_of_week": {
+          "name": "day_of_week",
+          "type": "day_of_week_enum",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "exit_strategy": {
+          "name": "exit_strategy",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "combined_exit_strategy": {
+          "name": "combined_exit_strategy",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "run_at": {
+          "name": "run_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "square_off_time": {
+          "name": "square_off_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expire_if_unsuccessful_in_mins": {
+          "name": "expire_if_unsuccessful_in_mins",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lots": {
+          "name": "lots",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "slm_percent": {
+          "name": "slm_percent",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sl_order_type": {
+          "name": "sl_order_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sl_limit_price_percent": {
+          "name": "sl_limit_price_percent",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_profit_points": {
+          "name": "max_profit_points",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_max_profit_enabled": {
+          "name": "is_max_profit_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "max_loss_points": {
+          "name": "max_loss_points",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_max_loss_enabled": {
+          "name": "is_max_loss_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "threshold_skew_percent": {
+          "name": "threshold_skew_percent",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_skew_percent": {
+          "name": "max_skew_percent",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "take_trade_irrespective_skew": {
+          "name": "take_trade_irrespective_skew",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "volatility_type": {
+          "name": "volatility_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trail_every_percentage_change_value": {
+          "name": "trail_every_percentage_change_value",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trailing_sl_percent": {
+          "name": "trailing_sl_percent",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trailing_max_profit_points": {
+          "name": "trailing_max_profit_points",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trailing_max_loss_points": {
+          "name": "trailing_max_loss_points",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_auto_square_off_enabled": {
+          "name": "is_auto_square_off_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "auto_square_off_time": {
+          "name": "auto_square_off_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_trade_plans_created_at": {
+          "name": "idx_trade_plans_created_at",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_trade_plans_instrument": {
+          "name": "idx_trade_plans_instrument",
+          "columns": [
+            {
+              "expression": "instrument",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_trade_plans_strategy": {
+          "name": "idx_trade_plans_strategy",
+          "columns": [
+            {
+              "expression": "strategy",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.transactions": {
+      "name": "transactions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "order_timestamp": {
+          "name": "order_timestamp",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "exchange": {
+          "name": "exchange",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tradingsymbol": {
+          "name": "tradingsymbol",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "instrument_token": {
+          "name": "instrument_token",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "transaction_type": {
+          "name": "transaction_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "average_price": {
+          "name": "average_price",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tag": {
+          "name": "tag",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "order_id": {
+          "name": "order_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "variety": {
+          "name": "variety",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "order_type": {
+          "name": "order_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "product": {
+          "name": "product",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.chase_status_type": {
+      "name": "chase_status_type",
+      "schema": "public",
+      "values": [
+        "SHORT",
+        "LONG",
+        "AWAITING_SHORT",
+        "AWAITING_LONG",
+        "AWAITING_SIGNAL"
+      ]
+    },
+    "public.day_of_week_enum": {
+      "name": "day_of_week_enum",
+      "schema": "public",
+      "values": [
+        "MONDAY",
+        "TUESDAY",
+        "WEDNESDAY",
+        "THURSDAY",
+        "FRIDAY",
+        "SATURDAY",
+        "SUNDAY"
+      ]
+    },
+    "public.job_execution_status": {
+      "name": "job_execution_status",
+      "schema": "public",
+      "values": [
+        "PENDING",
+        "QUEUE",
+        "EXECUTING",
+        "COMPLETED",
+        "FAILED",
+        "REJECT",
+        "CANCELLED",
+        "SQUARED_OFF"
+      ]
+    },
+    "public.job_execution_strategy": {
+      "name": "job_execution_strategy",
+      "schema": "public",
+      "values": [
+        "ATM_STRADDLE",
+        "ATM_STRANGLE",
+        "SUBSCRIBE_CHASE"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
