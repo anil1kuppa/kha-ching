@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm"
 import { db } from "../../lib/drizzle"
 import { tradePlans } from "../../lib/schema"
 import logger from "../../lib/logger"
@@ -103,9 +104,9 @@ export default async function plan(req, res) {
       await db
         .update(tradePlans)
         .set(mapPlanToDb(config, dayOfWeek))
-        .where(tradePlans.id.eq(planId))
+        .where(eq(tradePlans.id, planId))
 
-      const result = await db.select().from(tradePlans).where(tradePlans.id.eq(planId))
+      const result = await db.select().from(tradePlans).where(eq(tradePlans.id, planId))
 
       if (result.length > 0) {
         return res.json(mapPlanFromDb(result[0]))
@@ -115,7 +116,7 @@ export default async function plan(req, res) {
     }
 
     if (req.method === "DELETE") {
-      await db.delete(tradePlans).where(tradePlans.id.eq(config.id))
+      await db.delete(tradePlans).where(eq(tradePlans.id, config.id))
       return res.json({ success: true })
     }
 

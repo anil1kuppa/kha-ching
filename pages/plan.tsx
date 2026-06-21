@@ -159,17 +159,30 @@ const Plan = () => {
         expiryType: EXPIRY_TYPE.CURRENT,
         productType: PRODUCT_TYPE.NRML,
       } as any)
-      const { data: newConfig } = await axios.post("/api/plan", {
-        dayOfWeek: currentEditDay?.toUpperCase(),
-        config: [chaseConfig],
-      })
+
+      let chaseUpdatedConfig
+      if (selectedConfig.id) {
+        await axios.put("/api/plan", {
+          id: selectedConfig.id,
+          dayOfWeek: currentEditDay?.toUpperCase(),
+          config: chaseConfig,
+        })
+        chaseUpdatedConfig = { [selectedConfig.id]: { ...chaseConfig, id: selectedConfig.id } }
+      } else {
+        const { data: newConfig } = await axios.post("/api/plan", {
+          dayOfWeek: currentEditDay?.toUpperCase(),
+          config: [chaseConfig],
+        })
+        chaseUpdatedConfig = { [newConfig.id]: newConfig }
+      }
+
       setDayState({
         ...dayState,
         [currentEditDay as string]: {
           ...dayState[currentEditDay!],
           strategies: {
             ...dayState[currentEditDay!].strategies,
-            [newConfig.id]: newConfig,
+            ...chaseUpdatedConfig,
           },
         },
       })
