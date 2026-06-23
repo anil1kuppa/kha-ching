@@ -12,6 +12,7 @@ import {
   getKiteInstance,
   placeKiteOrder,
   placeSL,
+  getNetPositionQty,
 } from "../kiteUtils"
 import {
   getLatestEma,
@@ -23,19 +24,11 @@ import {
   getSubscribeChaseJob,
 } from "../drizzleDbUtils"
 import { CHASE_STATUS } from "../constants"
+import { generateSignal, getAcceptedPrevEma } from "../chaseSignal"
 
 const OPEN_MINUTES = 9 * 60 + 16   // 9:16 AM IST
 const CLOSE_MINUTES = 15 * 60 + 29  // 3:29 PM IST
 const ROLLOVER_MINUTES = 15 * 60    // 3:00 PM IST
-
-type ChaseInstrument = {
-  tradingsymbol: string
-  instrumentToken: number
-  ema: number
-  highestHigh: number
-  lowestLow: number
-  lastClose: number
-}
 
 async function processCalculateEMA(job: Job) {
   const { user } = job.data as any
@@ -101,6 +94,7 @@ async function processCalculateEMA(job: Job) {
         return {
           tradingsymbol: instrument.tradingsymbol,
           instrumentToken: instrument.instrument_token,
+          lotSize: (instrument as any).lot_size ?? 1,
           ...emaResult,
         }
       } catch (error) {
@@ -116,229 +110,6 @@ async function processCalculateEMA(job: Job) {
     await generateSignal(filteredResults as any[], todaysDate)
   }
   return filteredResults
-}
-
-const getAcceptedPrevEma = async (prevRow: any, now: dayjs.Dayjs, accessToken: string): Promise<number | null> => {
-  if (!prevRow) {
-    return null
-  }
-
-  const nowIst = toIst(now)
-  const currentMinute = nowIst.startOf("minute")
-  const cutoff = nowIst
-    .set("hour", 10)
-    .set("minute", 15)
-    .set("second", 0)
-    .set("millisecond", 0)
-  const prevCreatedAt = prevRow.createdAt ? toIst(prevRow.createdAt).startOf("minute") : null
-   logger.info(
-    `[chaseQueue] getAcceptedPrevEma currentMinute=${currentMinute.format("HH:mm")} cutoff=${cutoff.format("HH:mm")} prevCreatedAt=${prevCreatedAt ? prevCreatedAt.format("HH:mm") : "null"}`
-  )
-
-  if (!prevCreatedAt) {
-    return null
-  }
-
-  if (currentMinute.isSame(cutoff)) {
-    const previousTradingDay = toIst(await getPreviousTradingDay(accessToken)).startOf("day")
-    const previousTradingDayTarget = previousTradingDay.set("hour", 16).set("minute", 15)
-    return prevCreatedAt.isSame(previousTradingDayTarget) ? prevRow.ema : null
-  }
-
-  if (currentMinute.isAfter(cutoff)) {
-    const target = currentMinute.subtract(1, "hour")
-    return prevCreatedAt.isSame(target) ? prevRow.ema : null
-  }
-
-  return null
-}
-
-const generateSignal = async (
-  instruments: ChaseInstrument[],
-  todaysDate: string
-): Promise<void> => {
-  const chaseStatusData = await getChaseStatus()
-  if (!chaseStatusData) {
-    logger.error("[generateSignal] no chase status data found")
-    return
-  }
-  logger.info(
-    `[generateSignal] status=${JSON.stringify(chaseStatusData)} date=${todaysDate}`
-  )
-
-  let { status: currentStatus, tradingsymbol, stoploss, isSignalBreachingTolerance, createdAt } =
-    chaseStatusData
-
-  if (!instruments.length) {
-    logger.error("[generateSignal] no instruments found")
-    return
-  }
-
-  let instrument = instruments.length === 1 ? instruments[0] : instruments[1]
-
-  const [currentDate, timePart] = todaysDate.split(" ")
-  const createdAtDate = createdAt ? dayjs(createdAt).format("YYYY-MM-DD") : ""
-  const hour = parseInt(timePart.split(":")[0])
-
-  if (
-    (currentStatus === CHASE_STATUS.LONG || currentStatus === CHASE_STATUS.SHORT) &&
-    hour !== 13
-  ) {
-    logger.info("[generateSignal] chase already long/short, skipping")
-  } else if (
-    (currentStatus === CHASE_STATUS.LONG || currentStatus === CHASE_STATUS.SHORT) &&
-    hour === 13 &&
-    createdAtDate !== currentDate //Already in trade but not on the same day
-  ) {
-    instrument = instruments.find(i => i.tradingsymbol === tradingsymbol) ?? instrument
-    stoploss =
-      currentStatus === CHASE_STATUS.LONG
-        ? Math.max(instrument.ema, stoploss ?? 0)
-        : Math.min(instrument.ema, stoploss ?? 0)
-    logger.info(
-      `[generateSignal] updating SL to ${stoploss} for ${instrument.tradingsymbol}`
-    )
-    await postToSlack(
-      `:shield: Action $chase: Chase is currently ${currentStatus}, update the stoploss to ${stoploss} for symbol:${instrument.tradingsymbol}`
-    )
-    const { success, error } = await updateChaseStatus({ stoploss, updatedAt: new Date() })
-    if (!success) {
-      logger.error("[generateSignal] error updating chase_status:", error)
-    }
-  } else if (currentStatus === CHASE_STATUS.AWAITING_SIGNAL) {
-    const longTolerance = instrument.ema ? 1.002 * instrument.ema : 0
-    const shortTolerance = instrument.ema ? 0.998 * instrument.ema : 0
-    logger.info(
-      `[generateSignal] awaiting signal; longTolerance=${longTolerance} shortTolerance=${shortTolerance}`
-    )
-
-    if (instrument.lastClose > longTolerance) {
-      stoploss = Math.round(Math.min(instrument.ema, instrument.lowestLow))
-      await postToSlack(
-        `:rocket: Action $chase: Chase is AWAITING_LONG. 🚀 Enter on crossing ${instrument.highestHigh} for symbol: ${instrument.tradingsymbol}, stoploss ${stoploss} :shield:`
-      )
-      const { success, error } = await updateChaseStatus({
-        stoploss,
-        updatedAt: new Date(),
-        createdAt: new Date(),
-        entryPoint: instrument.highestHigh,
-        status: CHASE_STATUS.AWAITING_LONG,
-        tradingsymbol: instrument.tradingsymbol,
-        instrumentToken: instrument.instrumentToken,
-        isSignalBreachingTolerance: false,
-      })
-      if (!success) {
-        logger.error("[generateSignal] error updating chase_status:", error)
-      }
-    } else if (instrument.lastClose < shortTolerance) {
-      stoploss = Math.round(Math.max(instrument.ema, instrument.highestHigh))
-      await postToSlack(
-        `:rotating_light: Action $chase: Chase is AWAITING_SHORT. 🔻 Enter on crossing ${instrument.lowestLow} for symbol: ${instrument.tradingsymbol}, stoploss ${stoploss} :shield:`
-      )
-      const { success, error } = await updateChaseStatus({
-        stoploss,
-        updatedAt: new Date(),
-        createdAt: new Date(),
-        entryPoint: instrument.lowestLow,
-        status: CHASE_STATUS.AWAITING_SHORT,
-        tradingsymbol: instrument.tradingsymbol,
-        instrumentToken: instrument.instrumentToken,
-        isSignalBreachingTolerance: false,
-      })
-      if (!success) {
-        logger.error("[generateSignal] error updating chase_status:", error)
-      }
-    } else if (hour !== 16) {
-      await postToSlack(
-        `:grey_question: Entry Signal Not Found. :hourglass_flowing_sand: Chase is AwaitingSignal`
-      )
-    }
-  } else if (
-    currentStatus === CHASE_STATUS.AWAITING_LONG ||
-    currentStatus === CHASE_STATUS.AWAITING_SHORT
-  ) {
-    instrument = instruments.find(i => i.tradingsymbol === tradingsymbol) ?? instrument
-    logger.info(`[generateSignal] validating signal for ${instrument.tradingsymbol}`)
-    const longTolerance = instrument.ema ? 1.002 * instrument.ema : 0
-    const shortTolerance = instrument.ema ? 0.998 * instrument.ema : 0
-
-    if (hour === 16) {
-      logger.info("[generateSignal] EOD — resetting to AWAITING_SIGNAL")
-      const { success, error } = await updateChaseStatus({
-        updatedAt: new Date(),
-        createdAt: new Date(),
-        status: CHASE_STATUS.AWAITING_SIGNAL,
-        isSignalBreachingTolerance: false,
-      })
-      if (!success) {
-        logger.error("[generateSignal] error updating chase_status:", error)
-      }
-    } else if (
-      currentStatus === CHASE_STATUS.AWAITING_LONG &&
-      (instrument.lastClose < (stoploss ?? 0) || isSignalBreachingTolerance)
-    ) {
-      await postToSlack(
-        `:x: Action $chase: Signal Invalid. :no_entry_sign: Chase is now AwaitingSignal :hourglass_flowing_sand:`
-      )
-      const { success, error } = await updateChaseStatus({
-        updatedAt: new Date(),
-        createdAt: new Date(),
-        status: CHASE_STATUS.AWAITING_SIGNAL,
-        isSignalBreachingTolerance: false,
-      })
-      if (success) {
-        await generateSignal(instruments, todaysDate)
-      } else {
-        logger.error("[generateSignal] error updating chase_status:", error)
-      }
-    } else if (
-      currentStatus === CHASE_STATUS.AWAITING_LONG &&
-      instrument.lastClose < shortTolerance
-    ) {
-      logger.info(
-        "[generateSignal] awaiting long but below short tolerance — marking breach"
-      )
-      const { success, error } = await updateChaseStatus({
-        updatedAt: new Date(),
-        isSignalBreachingTolerance: true,
-      })
-      if (!success) {
-        logger.error("[generateSignal] error updating chase_status:", error)
-      }
-    } else if (
-      currentStatus === CHASE_STATUS.AWAITING_SHORT &&
-      (instrument.lastClose > (stoploss ?? 0) || isSignalBreachingTolerance)
-    ) {
-      await postToSlack(
-        `:x: Action $chase: Signal Invalid. :no_entry_sign: Chase is now AwaitingSignal :hourglass_flowing_sand:`
-      )
-      const { success, error } = await updateChaseStatus({
-        updatedAt: new Date(),
-        createdAt: new Date(),
-        status: CHASE_STATUS.AWAITING_SIGNAL,
-        isSignalBreachingTolerance: false,
-      })
-      if (success) {
-        await generateSignal(instruments, todaysDate)
-      } else {
-        logger.error("[generateSignal] error updating chase_status:", error)
-      }
-    } else if (
-      currentStatus === CHASE_STATUS.AWAITING_SHORT &&
-      instrument.lastClose > longTolerance
-    ) {
-      logger.info(
-        "[generateSignal] awaiting short but above long tolerance — marking breach"
-      )
-      const { success, error } = await updateChaseStatus({
-        isSignalBreachingTolerance: true,
-        updatedAt: new Date(),
-      })
-      if (!success) {
-        logger.error("[generateSignal] error updating chase_status:", error)
-      }
-    }
-  }
 }
 
 async function processUpdateSL(job: Job) {
@@ -436,18 +207,26 @@ async function processUpdateSL(job: Job) {
     const createdAtDate = createdAt ? toIst(createdAt).format("YYYY-MM-DD") : ""
     logger.info(`[processUpdateSL] previousTradingDay=${previousTradingDay} createdAtDate=${createdAtDate}`)
     let newStoploss = stoploss ?? 0
+    const netQty = isAutomated && quantity > 0 ? await getNetPositionQty(kite, tradingsymbol) : 0
+    const hasPosition = currentStatus === CHASE_STATUS.LONG ? netQty > 0 : netQty < 0
 
     if (currentStatus === CHASE_STATUS.LONG && previousTradingDay === createdAtDate) {
       if (lastClose >= longT1) {
         newStoploss = Math.max(newStoploss, ema)
         await postToSlack(`:zap: Action $chase: Update SL for ${tradingsymbol} to ${newStoploss}`)
         await updateChaseStatus({ stoploss: newStoploss, updatedAt: new Date(), tradingsymbol, instrumentToken })
-        if (isAutomated && quantity > 0) await placeSL(tradingsymbol, "SELL", quantity, accessToken, newStoploss)
+        if (isAutomated && quantity > 0) {
+          if (hasPosition) await placeSL(tradingsymbol, "SELL", quantity, accessToken, newStoploss)
+          else logger.info(`[processUpdateSL] no open position for ${tradingsymbol} — skipping SL order`)
+        }
       } else if (ema <= lastClose && lastClose <= longT1) {
         newStoploss = Math.max(newStoploss, Math.round((lowestLow + ema) / 2))
         await postToSlack(`:zap: Action $chase: Update SL for ${tradingsymbol} to ${newStoploss}`)
         await updateChaseStatus({ stoploss: newStoploss, updatedAt: new Date(), tradingsymbol, instrumentToken })
-        if (isAutomated && quantity > 0) await placeSL(tradingsymbol, "SELL", quantity, accessToken, newStoploss)
+        if (isAutomated && quantity > 0) {
+          if (hasPosition) await placeSL(tradingsymbol, "SELL", quantity, accessToken, newStoploss)
+          else logger.info(`[processUpdateSL] no open position for ${tradingsymbol} — skipping SL order`)
+        }
       } else if (lastClose <= shortT1) {
         await postToSlack(`:rotating_light: Action $chase: Transaction Alert Exit ${tradingsymbol} AT CMP :stop_sign:`)
         const { success, error } = await updateChaseStatus({
@@ -457,31 +236,45 @@ async function processUpdateSL(job: Job) {
         })
         if (success) {
           await insertChaseLog({ tradingsymbol, transactionType: "SELL", averagePrice: lastClose })
-          if (isAutomated && quantity > 0)
-            await placeKiteOrder(accessToken, { tradingsymbol, exchange: "NFO", transaction_type: "SELL", quantity, order_type: "MARKET", product: "NRML", tag: "chase" } as any)
+          if (isAutomated && quantity > 0) {
+            if (hasPosition) await placeKiteOrder(accessToken, { tradingsymbol, exchange: "NFO", transaction_type: "SELL", quantity, order_type: "MARKET", product: "NRML", tag: "chase" } as any)
+            else logger.info(`[processUpdateSL] no open position for ${tradingsymbol} — skipping exit order`)
+          }
         } else logger.error("[processUpdateSL] error updating chase_status:", error)
       } else if (shortT1 <= lastClose && lastClose <= ema) {
         newStoploss = Math.max(newStoploss, lowestLow)
         await postToSlack(`:zap: Action $chase: Update SL for ${tradingsymbol} to ${newStoploss}`)
         await updateChaseStatus({ stoploss: newStoploss, updatedAt: new Date(), tradingsymbol, instrumentToken })
-        if (isAutomated && quantity > 0) await placeSL(tradingsymbol, "SELL", quantity, accessToken, newStoploss)
+        if (isAutomated && quantity > 0) {
+          if (hasPosition) await placeSL(tradingsymbol, "SELL", quantity, accessToken, newStoploss)
+          else logger.info(`[processUpdateSL] no open position for ${tradingsymbol} — skipping SL order`)
+        }
       }
     } else if (currentStatus === CHASE_STATUS.SHORT && previousTradingDay === createdAtDate) {
       if (lastClose <= shortT1) {
         newStoploss = Math.min(newStoploss, ema)
         await postToSlack(`:zap: Action $chase: Update SL for ${tradingsymbol} to ${newStoploss}`)
         await updateChaseStatus({ stoploss: newStoploss, updatedAt: new Date(), tradingsymbol, instrumentToken })
-        if (isAutomated && quantity > 0) await placeSL(tradingsymbol, "BUY", quantity, accessToken, newStoploss)
+        if (isAutomated && quantity > 0) {
+          if (hasPosition) await placeSL(tradingsymbol, "BUY", quantity, accessToken, newStoploss)
+          else logger.info(`[processUpdateSL] no open position for ${tradingsymbol} — skipping SL order`)
+        }
       } else if (ema >= lastClose && lastClose >= shortT1) {
         newStoploss = Math.min(newStoploss, Math.round((highestHigh + ema) / 2))
         await postToSlack(`:zap: Action $chase: Update SL for ${tradingsymbol} to ${newStoploss}`)
         await updateChaseStatus({ stoploss: newStoploss, updatedAt: new Date(), tradingsymbol, instrumentToken })
-        if (isAutomated && quantity > 0) await placeSL(tradingsymbol, "BUY", quantity, accessToken, newStoploss)
+        if (isAutomated && quantity > 0) {
+          if (hasPosition) await placeSL(tradingsymbol, "BUY", quantity, accessToken, newStoploss)
+          else logger.info(`[processUpdateSL] no open position for ${tradingsymbol} — skipping SL order`)
+        }
       } else if (longT1 >= lastClose && lastClose >= ema) {
         newStoploss = Math.min(newStoploss, highestHigh)
         await postToSlack(`:zap: Action $chase: Update SL for ${tradingsymbol} to ${newStoploss}`)
         await updateChaseStatus({ stoploss: newStoploss, updatedAt: new Date(), tradingsymbol, instrumentToken })
-        if (isAutomated && quantity > 0) await placeSL(tradingsymbol, "BUY", quantity, accessToken, newStoploss)
+        if (isAutomated && quantity > 0) {
+          if (hasPosition) await placeSL(tradingsymbol, "BUY", quantity, accessToken, newStoploss)
+          else logger.info(`[processUpdateSL] no open position for ${tradingsymbol} — skipping SL order`)
+        }
       } else if (lastClose >= longT1) {
         await postToSlack(`:rotating_light: Action $chase: Transaction Alert Exit ${tradingsymbol} AT CMP :stop_sign:`)
         const { success, error } = await updateChaseStatus({
@@ -491,8 +284,10 @@ async function processUpdateSL(job: Job) {
         })
         if (success) {
           await insertChaseLog({ tradingsymbol, transactionType: "BUY", averagePrice: lastClose })
-          if (isAutomated && quantity > 0)
-            await placeKiteOrder(accessToken, { tradingsymbol, exchange: "NFO", transaction_type: "BUY", quantity, order_type: "MARKET", product: "NRML", tag: "chase" } as any)
+          if (isAutomated && quantity > 0) {
+            if (hasPosition) await placeKiteOrder(accessToken, { tradingsymbol, exchange: "NFO", transaction_type: "BUY", quantity, order_type: "MARKET", product: "NRML", tag: "chase" } as any)
+            else logger.info(`[processUpdateSL] no open position for ${tradingsymbol} — skipping exit order`)
+          }
         } else logger.error("[processUpdateSL] error updating chase_status:", error)
       }
     } else {
@@ -507,8 +302,10 @@ async function processUpdateSL(job: Job) {
         isSignalBreachingTolerance: false,
       })
       if (success) {
-        if (isAutomated && quantity > 0)
-          await placeSL(tradingsymbol, currentStatus === CHASE_STATUS.LONG ? "SELL" : "BUY", quantity, accessToken, newStoploss)
+        if (isAutomated && quantity > 0) {
+          if (hasPosition) await placeSL(tradingsymbol, currentStatus === CHASE_STATUS.LONG ? "SELL" : "BUY", quantity, accessToken, newStoploss)
+          else logger.info(`[processUpdateSL] no open position for ${tradingsymbol} — skipping SL order`)
+        }
       } else logger.error("[processUpdateSL] error updating chase_status:", error)
     }
 
@@ -559,13 +356,18 @@ async function processUpdateSL(job: Job) {
       averagePrice: emaResult.lastClose,
     })
     if (isAutomated && quantity > 0) {
-      const newLotSize: number = (nextInstrument as any)?.lot_size ?? lotSize
-      const newQuantity = lots * newLotSize
-      const exitSide = currentStatus === CHASE_STATUS.LONG ? "SELL" : "BUY"
-      const entrySide = currentStatus === CHASE_STATUS.LONG ? "BUY" : "SELL"
-      await placeKiteOrder(accessToken, { tradingsymbol, exchange: "NFO", transaction_type: exitSide, quantity, order_type: "MARKET", product: "NRML", tag: "chase" } as any)
-      await placeKiteOrder(accessToken, { tradingsymbol: nextInstrument.tradingsymbol, exchange: "NFO", transaction_type: entrySide, quantity: newQuantity, order_type: "MARKET", product: "NRML", tag: "chase" } as any)
-      await placeSL(nextInstrument.tradingsymbol, exitSide, newQuantity, accessToken, newStoploss)
+      const rolloverNetQty = await getNetPositionQty(kite, tradingsymbol)
+      if (rolloverNetQty === 0) {
+        logger.info(`[processUpdateSL] no open position for ${tradingsymbol} — skipping rollover orders`)
+      } else {
+        const newLotSize: number = (nextInstrument as any)?.lot_size ?? lotSize
+        const newQuantity = lots * newLotSize
+        const exitSide = currentStatus === CHASE_STATUS.LONG ? "SELL" : "BUY"
+        const entrySide = currentStatus === CHASE_STATUS.LONG ? "BUY" : "SELL"
+        await placeKiteOrder(accessToken, { tradingsymbol, exchange: "NFO", transaction_type: exitSide, quantity, order_type: "MARKET", product: "NRML", tag: "chase" } as any)
+        await placeKiteOrder(accessToken, { tradingsymbol: nextInstrument.tradingsymbol, exchange: "NFO", transaction_type: entrySide, quantity: newQuantity, order_type: "MARKET", product: "NRML", tag: "chase" } as any)
+        await placeSL(nextInstrument.tradingsymbol, exitSide, newQuantity, accessToken, newStoploss)
+      }
     }
     return { signal: "ROLLOVER", stoploss: newStoploss }
   }
@@ -617,9 +419,14 @@ async function processUpdateSL(job: Job) {
         })
         if (success) {
           await insertChaseLog({ tradingsymbol, transactionType: "BUY", averagePrice: entryPoint ?? 0 })
+          // Entry was placed as SL-M in generateSignal; only place the stop-loss order here
           if (isAutomated && quantity > 0) {
-            await placeKiteOrder(accessToken, { tradingsymbol, exchange: "NFO", transaction_type: "BUY", quantity, order_type: "MARKET", product: "NRML", tag: "chase" } as any)
-            await placeKiteOrder(accessToken, { tradingsymbol, exchange: "NFO", transaction_type: "SELL", quantity, order_type: "SL", product: "NRML", tag: "chase", trigger_price: stoploss ?? 0, price: (stoploss ?? 0) - 5 } as any)
+            const entryNetQty = await getNetPositionQty(kite, tradingsymbol)
+            if (entryNetQty > 0) {
+              await placeKiteOrder(accessToken, { tradingsymbol, exchange: "NFO", transaction_type: "SELL", quantity, order_type: "SL", product: "NRML", tag: "chase", trigger_price: stoploss ?? 0, price: (stoploss ?? 0) - 5 } as any)
+            } else {
+              logger.info(`[processUpdateSL] no long position for ${tradingsymbol} — entry SL-M may not have filled yet, skipping SL order`)
+            }
           }
         } else logger.error("[processUpdateSL] error updating chase_status:", error)
         return { signal: "TRANSACTION_ALERT", stoploss }
@@ -631,9 +438,14 @@ async function processUpdateSL(job: Job) {
         })
         if (success) {
           await insertChaseLog({ tradingsymbol, transactionType: "SELL", averagePrice: entryPoint ?? 0 })
+          // Entry was placed as SL-M in generateSignal; only place the stop-loss order here
           if (isAutomated && quantity > 0) {
-            await placeKiteOrder(accessToken, { tradingsymbol, exchange: "NFO", transaction_type: "SELL", quantity, order_type: "MARKET", product: "NRML", tag: "chase" } as any)
-            await placeKiteOrder(accessToken, { tradingsymbol, exchange: "NFO", transaction_type: "BUY", quantity, order_type: "SL", product: "NRML", tag: "chase", trigger_price: stoploss ?? 0, price: (stoploss ?? 0) + 5 } as any)
+            const entryNetQty = await getNetPositionQty(kite, tradingsymbol)
+            if (entryNetQty < 0) {
+              await placeKiteOrder(accessToken, { tradingsymbol, exchange: "NFO", transaction_type: "BUY", quantity, order_type: "SL", product: "NRML", tag: "chase", trigger_price: stoploss ?? 0, price: (stoploss ?? 0) + 5 } as any)
+            } else {
+              logger.info(`[processUpdateSL] no short position for ${tradingsymbol} — entry SL-M may not have filled yet, skipping SL order`)
+            }
           }
         } else logger.error("[processUpdateSL] error updating chase_status:", error)
         return { signal: "TRANSACTION_ALERT", stoploss }

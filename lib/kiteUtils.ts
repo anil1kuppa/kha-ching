@@ -647,3 +647,9 @@ export async function getMultipleInstrumentPrices(instruments: Array<{ exchange:
 
   return Object.fromEntries(results)
 }
+
+export async function getNetPositionQty(kite: any, tradingsymbol: string): Promise<number> {
+  const positions = await kite.getPositions()
+  const net = (positions.net as any[]).find((p: any) => p.tradingsymbol === tradingsymbol)
+  return net?.quantity ?? 0
+}
