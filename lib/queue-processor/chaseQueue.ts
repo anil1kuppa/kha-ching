@@ -19,7 +19,6 @@ import {
   insertEma,
   getChaseStatus,
   updateChaseStatus,
-  getLatestAccessToken,
   insertChaseLog,
   getSubscribeChaseJob,
 } from "../drizzleDbUtils"
@@ -39,9 +38,9 @@ async function processCalculateEMA(job: Job) {
     return null
   }
 
-  const accessToken = await getLatestAccessToken()
+  const accessToken = user?.session?.access_token
   if (!accessToken) {
-    logger.error("[processCalculateEMA] no access token in DB")
+    logger.error("[processCalculateEMA] no access token in job data")
     return null
   }
 
@@ -107,7 +106,7 @@ async function processCalculateEMA(job: Job) {
   const filteredResults = results.filter(Boolean)
   const todaysDate = toIst(now).format("YYYY-MM-DD HH:mm:ss")
   if (filteredResults.length) {
-    await generateSignal(filteredResults as any[], todaysDate)
+    await generateSignal(filteredResults as any[], todaysDate, accessToken)
   }
   return filteredResults
 }
@@ -145,9 +144,10 @@ async function processUpdateSL(job: Job) {
     return null
   }
 
-  const accessToken = await getLatestAccessToken()
+  const { user } = job.data as any
+  const accessToken = user?.session?.access_token
   if (!accessToken) {
-    logger.error("[processUpdateSL] no access token in DB")
+    logger.error("[processUpdateSL] no access token in job data")
     return null
   }
 

@@ -5,7 +5,6 @@ import { getPreviousTradingDay, placeKiteOrder, getKiteInstance } from "./kiteUt
 import {
   getChaseStatus,
   updateChaseStatus,
-  getLatestAccessToken,
   getSubscribeChaseJob,
 } from "./drizzleDbUtils"
 import { CHASE_STATUS } from "./constants"
@@ -62,13 +61,9 @@ export const getAcceptedPrevEma = async (
 async function placeEntryTriggerOrder(
   instrument: ChaseInstrument,
   side: "BUY" | "SELL",
-  triggerPrice: number
+  triggerPrice: number,
+  accessToken: string
 ): Promise<void> {
-  const accessToken = await getLatestAccessToken()
-  if (!accessToken) {
-    logger.warn("[generateSignal] no access token — skipping entry trigger order")
-    return
-  }
   const subscribeChaseJob = await getSubscribeChaseJob()
   const lots = subscribeChaseJob?.lots ?? 0
   if (lots <= 0) {
@@ -115,7 +110,8 @@ async function placeEntryTriggerOrder(
 
 export const generateSignal = async (
   instruments: ChaseInstrument[],
-  todaysDate: string
+  todaysDate: string,
+  accessToken: string
 ): Promise<void> => {
   const chaseStatusData = await getChaseStatus()
   if (!chaseStatusData) {
@@ -190,7 +186,7 @@ export const generateSignal = async (
       if (!success) {
         logger.error("[generateSignal] error updating chase_status:", error)
       } else {
-        await placeEntryTriggerOrder(instrument, "BUY", instrument.highestHigh)
+        await placeEntryTriggerOrder(instrument, "BUY", instrument.highestHigh, accessToken)
       }
     } else if (instrument.lastClose < shortTolerance) {
       stoploss = Math.round(Math.max(instrument.ema, instrument.highestHigh))
@@ -210,7 +206,7 @@ export const generateSignal = async (
       if (!success) {
         logger.error("[generateSignal] error updating chase_status:", error)
       } else {
-        await placeEntryTriggerOrder(instrument, "SELL", instrument.lowestLow)
+        await placeEntryTriggerOrder(instrument, "SELL", instrument.lowestLow, accessToken)
       }
     } else if (hour !== 16) {
       await postToSlack(
@@ -251,7 +247,7 @@ export const generateSignal = async (
         isSignalBreachingTolerance: false,
       })
       if (success) {
-        await generateSignal(instruments, todaysDate)
+        await generateSignal(instruments, todaysDate, accessToken)
       } else {
         logger.error("[generateSignal] error updating chase_status:", error)
       }
@@ -283,7 +279,7 @@ export const generateSignal = async (
         isSignalBreachingTolerance: false,
       })
       if (success) {
-        await generateSignal(instruments, todaysDate)
+        await generateSignal(instruments, todaysDate, accessToken)
       } else {
         logger.error("[generateSignal] error updating chase_status:", error)
       }

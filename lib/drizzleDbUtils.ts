@@ -1,7 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm"
 import { db } from "./drizzle"
 import logger from "./logger"
-import { accesstoken, chaseLog, chaseStatus, ema, jobExecutions } from "./schema"
+import { accesstoken, chaseLog, chaseStatus, ema, jobExecutions, transactions } from "./schema"
 
 export async function storeAccessToken(access_token: string): Promise<void> {
   try {
@@ -88,26 +88,28 @@ export async function insertMultipleTransactions(
   }
 
   try {
-    const valueFragments = transactionsData.map(
-      t => sql`(
-      ${t.order_timestamp}, ${t.exchange}, ${t.tradingsymbol}, ${t.instrument_token},
-      ${t.transaction_type}, ${t.quantity}, ${t.average_price}, ${t.tag},
-      ${t.order_id}, ${t.variety}, ${t.order_type}, ${t.product}
-    )`
-    )
+    const values = transactionsData.map(t => ({
+      orderTimestamp: t.order_timestamp,
+      exchange: t.exchange,
+      tradingsymbol: t.tradingsymbol,
+      instrumentToken: t.instrument_token,
+      transactionType: t.transaction_type,
+      quantity: t.quantity,
+      averagePrice: t.average_price != null ? String(t.average_price) : undefined,
+      tag: t.tag,
+      orderId: t.order_id,
+      variety: t.variety,
+      orderType: t.order_type,
+      product: t.product,
+    }))
 
-    const result = await db.execute(sql`
-      INSERT INTO public.transactions (
-        order_timestamp, exchange, tradingsymbol, instrument_token,
-        transaction_type, quantity, average_price, tag,
-        order_id, variety, order_type, product
-      )
-      VALUES ${sql.join(valueFragments, sql`, `)}
-      ON CONFLICT (order_id) DO NOTHING
-      RETURNING id
-    `)
+    const result = await db
+      .insert(transactions)
+      .values(values)
+      .onConflictDoNothing()
+      .returning({ id: transactions.id })
 
-    const inserted = result.rows.length
+    const inserted = result.length
     const skipped = transactionsData.length - inserted
     logger.info(
       `[insertMultipleTransactions] Inserted ${inserted}, skipped ${skipped} (duplicates)`
