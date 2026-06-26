@@ -351,7 +351,7 @@ export async function asyncGetIndexInstruments(exchange = "NFO"): Promise<Instru
       item => item.name === "NIFTY" || item.name === "BANKNIFTY" || item.name === "FINNIFTY"
     )
   }
-
+logger.info(`[asyncGetIndexInstruments] Fetched ${instruments.length} instruments for exchange: ${exchange}`);
   return instruments
 }
 

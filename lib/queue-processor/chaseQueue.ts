@@ -212,7 +212,8 @@ async function processUpdateSL(job: Job) {
 
     if (currentStatus === CHASE_STATUS.LONG && previousTradingDay === createdAtDate) {
       if (lastClose >= longT1) {
-        newStoploss = Math.max(newStoploss, ema)
+        newStoploss = Math.max(newStoploss, ema);
+        logger.info(`[processUpdateSL] Update SL to ${newStoploss} as lastClose>=longSignalT1Tolerance`);
         await postToSlack(`:zap: Action $chase: Update SL for ${tradingsymbol} to ${newStoploss}`)
         await updateChaseStatus({ stoploss: newStoploss, updatedAt: new Date(), tradingsymbol, instrumentToken })
         if (isAutomated && quantity > 0) {
@@ -221,6 +222,7 @@ async function processUpdateSL(job: Job) {
         }
       } else if (ema <= lastClose && lastClose <= longT1) {
         newStoploss = Math.max(newStoploss, Math.round((lowestLow + ema) / 2))
+        logger.info(`[processUpdateSL] Update SL to ${newStoploss} as chase is long and lastClose is less than longT1`);
         await postToSlack(`:zap: Action $chase: Update SL for ${tradingsymbol} to ${newStoploss}`)
         await updateChaseStatus({ stoploss: newStoploss, updatedAt: new Date(), tradingsymbol, instrumentToken })
         if (isAutomated && quantity > 0) {
@@ -230,7 +232,7 @@ async function processUpdateSL(job: Job) {
       } else if (lastClose <= shortT1) {
         await postToSlack(`:rotating_light: Action $chase: Transaction Alert Exit ${tradingsymbol} AT CMP :stop_sign:`)
         const { success, error } = await updateChaseStatus({
-          stoploss: newStoploss, updatedAt: new Date(), createdAt: new Date(),
+          stoploss: lastClose, updatedAt: new Date(), createdAt: new Date(),
           status: CHASE_STATUS.AWAITING_SIGNAL, tradingsymbol, instrumentToken,
           isSignalBreachingTolerance: false,
         })
