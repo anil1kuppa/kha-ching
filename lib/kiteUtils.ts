@@ -17,13 +17,28 @@ import type {
   Variety,
 } from "kiteconnect"
 
+import { Promise } from "bluebird"
+import { eq } from "drizzle-orm"
 import logger from "./logger"
 import type { COMPLETED_BY_TAG } from "./constants"
+import { EXPIRY_TYPE, INSTRUMENT_DETAILS, USER_OVERRIDE, type INSTRUMENTS } from "./constants"
+import { db } from "./drizzle"
+import { allSettled } from "./es6-promise"
+import { jobExecutions } from "./schema"
+import type { KiteOrder } from "../types/kite"
+import type { SignalXUser } from "../types/misc"
+import { millisecondsTill7, closest, finiteStateChecker, orderStateChecker, withRemoteRetry, isMockOrder, ms } from "./utils"
 
 dayjs.extend(isSameOrBefore)
-const ms = seconds => seconds * 1000
 
 export type PlaceOrderParams = Parameters<Connect["placeOrder"]>[1]
+
+export type TradingSymbolInterface = Instrument
+export interface StrikeInterface {
+  PE_STRING: string
+  CE_STRING: string
+  LOT_SIZE: number
+}
 
 type KiteConnectInstance = InstanceType<typeof KiteConnect>
 
@@ -252,7 +267,6 @@ candles = await kite.getHistoricalData(
   return calculate40EMA(candles, prevEma)
 }
 
-/** Creates a KiteConnect instance synchronously from a session user object. Throws if the user has no valid access token. */
 /**
  * Create a KiteConnect instance from a session user object.
  *
@@ -281,7 +295,6 @@ export function syncGetKiteInstance(user): KiteConnectInstance {
   })
 }
 
-/** Wraps the SDK placeOrder call, defaulting market_protection to 2% if not explicitly set. */
 /**
  * Place an order through Kite, defaulting market protection if not provided.
  *
@@ -301,7 +314,6 @@ export async function placeOrder(
   } as PlaceOrderParams)
 }
 
-/** Fetches all orders for the session regardless of status. */
 /**
  * Fetch all orders for the current Kite session.
  *
@@ -335,7 +347,6 @@ export async function fetchOrdersFromKite(accessToken: string): Promise<Order[]>
   }
 }
 
-/** Fetches instruments for the given exchange. For NFO, filters to index derivatives only (NIFTY, BANKNIFTY, FINNIFTY). Uses a public endpoint — no access token required. */
 /**
  * Fetch instruments for a given exchange, filtered to index derivatives for NFO.
  *
@@ -345,13 +356,12 @@ export async function fetchOrdersFromKite(accessToken: string): Promise<Order[]>
 export async function asyncGetIndexInstruments(exchange = "NFO"): Promise<Instrument[]> {
   const kite = getKiteInstance()
   const instruments = await kite.getInstruments(exchange as Exchanges)
-
+logger.info(`[asyncGetIndexInstruments] Fetched ${instruments.length} instruments for exchange: ${exchange}`);
   if (exchange === "NFO") {
     return instruments.filter(
       item => item.name === "NIFTY" || item.name === "BANKNIFTY" || item.name === "FINNIFTY"
     )
   }
-logger.info(`[asyncGetIndexInstruments] Fetched ${instruments.length} instruments for exchange: ${exchange}`);
   return instruments
 }
 
@@ -361,16 +371,706 @@ logger.info(`[asyncGetIndexInstruments] Fetched ${instruments.length} instrument
  * @returns A cached promise resolving to an array of Kite Instrument objects.
  */
 export const getIndexInstruments = memoizer(asyncGetIndexInstruments, {
-  maxAge: dayjs().get("hours") < 18 ? ms(18 - dayjs().get("hours")) * 60 * 60 : ms(1 * 60),
+  maxAge: millisecondsTill7(),
   promise: true,
 })
 
 /**
- * Return the first 40 FnO instruments for the requested underlying and type.
+ * Filter the cached index instruments by any combination of symbol, strike, instrument type,
+ * and trading symbol, then sort results by expiry date ascending.
  *
- * @param nfoSymbol - Underlying symbol such as NIFTY, BANKNIFTY, or FINNIFTY.
- * @param instrumentType - Instrument type to filter (CE, PE, FUT).
- * @returns A filtered and sorted list of Kite Instrument objects.
+ * @param nfoSymbol - Underlying name to filter on (e.g. NIFTY, BANKNIFTY).
+ * @param strike - Strike price to match exactly.
+ * @param instrumentType - Option type to filter (CE or PE).
+ * @param tradingsymbol - Exact Kite trading symbol to match.
+ * @returns Matching instruments sorted by nearest expiry first.
+ */
+export const getSortedMatchingIntrumentsData = async ({
+  nfoSymbol,
+  strike,
+  instrumentType,
+  tradingsymbol,
+}: {
+  nfoSymbol?: string
+  strike?: number
+  instrumentType?: string
+  tradingsymbol?: string
+}): Promise<Instrument[]> => {
+  const instrumentsData = await getIndexInstruments()
+  return instrumentsData
+    .filter(
+      item =>
+        (nfoSymbol ? item.name === nfoSymbol : true) &&
+        (strike ? item.strike == strike : true) && // eslint-disable-line
+        (tradingsymbol ? item.tradingsymbol === tradingsymbol : true) &&
+        (instrumentType ? item.instrument_type === instrumentType : true)
+    )
+    .sort((row1, row2) => (dayjs(row1.expiry).isSameOrBefore(dayjs(row2.expiry)) ? -1 : 1))
+}
+
+/**
+ * Return all OTM option instruments for a given underlying, strike, type, and expiry date.
+ * CE options have a strike above the pivot; PE options have a strike below.
+ *
+ * @param nfoSymbol - Underlying name (e.g. NIFTY, BANKNIFTY).
+ * @param strike - Pivot strike; OTM CE strikes are above it, PE strikes below.
+ * @param instrumentType - Option type: CE or PE.
+ * @param expiry - Expiry date string to filter on.
+ * @returns Instruments sorted by strike ascending.
+ */
+export const getOTMOptions = async ({
+  nfoSymbol,
+  strike,
+  instrumentType,
+  expiry,
+}: {
+  nfoSymbol?: string
+  strike?: number
+  instrumentType?: string
+  expiry?: string
+}): Promise<Instrument[]> => {
+  const instrumentsData = await getIndexInstruments()
+  return instrumentsData
+    .filter(
+      item =>
+        (nfoSymbol ? item.name === nfoSymbol : true) &&
+        (strike ? (instrumentType === "CE" ? item.strike > strike : item.strike < strike) : true) &&
+        (instrumentType ? item.instrument_type === instrumentType : true) &&
+        (expiry ? item.expiry === expiry : true)
+    )
+    .sort((row1, row2) => (row1.strike < row2.strike ? -1 : 1))
+}
+
+/**
+ * Fetch OHLC data for an instrument and annotate it with an intraday trend direction.
+ * Trend is "CE" when last price is below open (bearish) and "PE" when above (bullish).
+ *
+ * @param kite - Authenticated KiteConnect instance.
+ * @param symbol - Instrument key in "EXCHANGE:TRADINGSYMBOL" format.
+ * @param instrument - Instrument identifier passed through to the Kite OHLC call.
+ * @returns Object with `trend` and `last_price`, or undefined on error.
+ */
+export async function getOHLC({ kite, symbol, instrument }): Promise<any> {
+  try {
+    const data = await kite.getOHLC(symbol)
+    logger.info("getOHLC data", data)
+    if (data[symbol].last_price < data[symbol].ohlc.open) data[symbol].trend = "CE"
+    else data[symbol].trend = "PE"
+    return {
+      trend: data[symbol].trend,
+      last_price: data[symbol].last_price,
+    }
+  } catch (e) {
+    logger.info(`Excpetion is coming: ${e}`)
+  }
+}
+
+/**
+ * Fetch the last traded price (LTP) for an instrument via the Kite LTP API.
+ *
+ * @param kite - Authenticated KiteConnect instance.
+ * @param underlying - Trading symbol of the instrument (e.g. NIFTY, BANKNIFTY25JUNFUT).
+ * @param exchange - Exchange segment (e.g. NSE, NFO).
+ * @returns The last traded price as a number.
+ */
+export async function getInstrumentPrice(
+  kite,
+  underlying: string,
+  exchange: string
+): Promise<number> {
+  const instrumentString = `${exchange}:${underlying}`
+  const underlyingRes = await kite.getLTP(instrumentString)
+  return Number(underlyingRes[instrumentString].last_price)
+}
+
+/**
+ * Compute the percentage price skew between two option legs using their LTPs.
+ * Skew is the absolute mid-point percentage difference between the two prices.
+ *
+ * @param kite - Authenticated KiteConnect instance.
+ * @param instrument1 - Trading symbol of the first leg (e.g. CE string).
+ * @param instrument2 - Trading symbol of the second leg (e.g. PE string).
+ * @param exchange - Exchange segment for both instruments.
+ * @returns Object with each instrument's price and the computed skew percentage.
+ */
+export async function getSkew(kite, instrument1, instrument2, exchange) {
+  const [price1, price2] = await Promise.all([
+    getInstrumentPrice(kite, instrument1, exchange),
+    getInstrumentPrice(kite, instrument2, exchange),
+  ])
+  const skew = Math.floor((Math.abs(price1 - price2) / ((price1 + price2) / 2)) * 100)
+  return {
+    [instrument1]: price1,
+    [instrument2]: price2,
+    skew,
+  }
+}
+
+/**
+ * Look up the nearest (current) weekly expiry trading symbol for a given strike.
+ * When no instrumentType is provided, returns a StrikeInterface with PE_STRING, CE_STRING,
+ * and LOT_SIZE. With an instrumentType, returns the matching Instrument directly.
+ *
+ * @param nfoSymbol - Underlying name (e.g. NIFTY, BANKNIFTY).
+ * @param strike - Strike price to match.
+ * @param instrumentType - Option type (CE or PE); omit to get both legs.
+ * @param tradingsymbol - Exact trading symbol override.
+ * @returns TradingSymbolInterface, StrikeInterface, or null if not found.
+ */
+export const getCurrentExpiryTradingSymbol = async ({
+  nfoSymbol,
+  strike,
+  instrumentType,
+  tradingsymbol,
+}: {
+  nfoSymbol?: string
+  strike?: number
+  instrumentType?: string
+  tradingsymbol?: string
+}): Promise<TradingSymbolInterface | StrikeInterface | null> => {
+  const rows = await getSortedMatchingIntrumentsData({
+    nfoSymbol,
+    strike,
+    instrumentType,
+    tradingsymbol,
+  })
+  if (instrumentType) {
+    return rows.length ? rows[0] : null
+  }
+  const relevantRows = rows.slice(0, 2)
+  const peStrike = relevantRows?.find(item => item.instrument_type === "PE")?.tradingsymbol
+  const ceStrike = relevantRows?.find(item => item.instrument_type === "CE")?.tradingsymbol
+  const lotSize = relevantRows?.find(item => item.instrument_type === "PE")?.lot_size
+  if (!peStrike || !ceStrike) return null
+  return {
+    PE_STRING: peStrike,
+    CE_STRING: ceStrike,
+    LOT_SIZE: Number(lotSize!),
+  }
+}
+
+/**
+ * Look up the next weekly expiry trading symbol for a given strike (second-nearest expiry).
+ * When no instrumentType is provided, returns a StrikeInterface with PE_STRING, CE_STRING,
+ * and LOT_SIZE. With an instrumentType, returns the matching Instrument directly.
+ *
+ * @param nfoSymbol - Underlying name (e.g. NIFTY, BANKNIFTY).
+ * @param strike - Strike price to match.
+ * @param instrumentType - Option type (CE or PE); omit to get both legs.
+ * @param tradingsymbol - Exact trading symbol override.
+ * @returns TradingSymbolInterface, StrikeInterface, or null if not found.
+ */
+export const getNextExpiryTradingSymbol = async ({
+  nfoSymbol,
+  strike,
+  instrumentType,
+  tradingsymbol,
+}: {
+  nfoSymbol?: string
+  strike?: number
+  instrumentType?: string
+  tradingsymbol?: string
+}): Promise<TradingSymbolInterface | StrikeInterface | null> => {
+  const rows = await getSortedMatchingIntrumentsData({
+    nfoSymbol,
+    strike,
+    instrumentType,
+    tradingsymbol,
+  })
+  if (instrumentType) {
+    return rows.length ? rows[1] : null
+  }
+  const relevantRows = rows.slice(2, 4)
+  const peStrike = relevantRows?.find(item => item.instrument_type === "PE")?.tradingsymbol
+  const ceStrike = relevantRows?.find(item => item.instrument_type === "CE")?.tradingsymbol
+  const lotSize = relevantRows?.find(item => item.instrument_type === "PE")?.lot_size
+  if (!peStrike || !ceStrike) return null
+  return {
+    PE_STRING: peStrike,
+    CE_STRING: ceStrike,
+    LOT_SIZE: Number(lotSize!),
+  }
+}
+
+/**
+ * Look up the monthly (last Thursday of the current calendar month) expiry trading symbol.
+ * Falls back to the next month if no instruments remain in the current month.
+ * When no instrumentType is provided, returns a StrikeInterface with PE_STRING, CE_STRING,
+ * and LOT_SIZE. With an instrumentType, returns the matching Instrument directly.
+ *
+ * @param nfoSymbol - Underlying name (e.g. NIFTY, BANKNIFTY).
+ * @param strike - Strike price to match.
+ * @param instrumentType - Option type (CE or PE); omit to get both legs.
+ * @param tradingsymbol - Exact trading symbol override.
+ * @returns TradingSymbolInterface, StrikeInterface, or null if not found.
+ */
+export const getMonthlyExpiryTradingSymbol = async ({
+  nfoSymbol,
+  strike,
+  instrumentType,
+  tradingsymbol,
+}: {
+  nfoSymbol?: string
+  strike?: number
+  instrumentType?: string
+  tradingsymbol?: string
+}): Promise<TradingSymbolInterface | StrikeInterface | null> => {
+  const instrumentsData = await getSortedMatchingIntrumentsData({
+    nfoSymbol,
+    strike,
+    instrumentType,
+    tradingsymbol,
+  })
+  let rows = instrumentsData.filter(
+    item => dayjs().get("month") === dayjs(item.expiry).get("month")
+  )
+  if (!rows.length) {
+    const month = dayjs().get("month") === 11 ? 0 : dayjs().get("month")
+    rows = instrumentsData.filter(item => dayjs(item.expiry).get("month") === month)
+  }
+  rows = rows.sort((row1, row2) => (dayjs(row1.expiry).isSameOrBefore(dayjs(row2.expiry)) ? -1 : 1))
+  const rowsLength = rows.length
+  if (instrumentType) {
+    return rows.length ? rows[rowsLength - 1] : null
+  }
+  const relevantRows = rows.slice(rowsLength - 2, rowsLength)
+  const peStrike = relevantRows?.find(item => item.instrument_type === "PE")?.tradingsymbol
+  const ceStrike = relevantRows?.find(item => item.instrument_type === "CE")?.tradingsymbol
+  const lotSize = relevantRows?.find(item => item.instrument_type === "PE")?.lot_size
+  if (!peStrike || !ceStrike) return null
+  return {
+    PE_STRING: peStrike,
+    CE_STRING: ceStrike,
+    LOT_SIZE: Number(lotSize!),
+  }
+}
+
+/**
+ * Route to the correct expiry trading symbol lookup based on the requested EXPIRY_TYPE.
+ * Delegates to getCurrentExpiryTradingSymbol, getNextExpiryTradingSymbol, or
+ * getMonthlyExpiryTradingSymbol accordingly.
+ *
+ * @param nfoSymbol - Underlying name (e.g. NIFTY, BANKNIFTY).
+ * @param strike - Strike price to match.
+ * @param instrumentType - Option type (CE or PE); omit to get both legs as StrikeInterface.
+ * @param tradingsymbol - Exact trading symbol override.
+ * @param expiry - Which expiry to target: CURRENT (default), NEXT, or MONTHLY.
+ * @returns TradingSymbolInterface, StrikeInterface, or null if not found.
+ */
+export const getExpiryTradingSymbol = async ({
+  nfoSymbol,
+  strike,
+  instrumentType,
+  tradingsymbol,
+  expiry = EXPIRY_TYPE.CURRENT,
+}: {
+  nfoSymbol?: string
+  strike?: number
+  instrumentType?: string
+  tradingsymbol?: string
+  expiry?: EXPIRY_TYPE
+}): Promise<TradingSymbolInterface | StrikeInterface | null> => {
+  logger.info("Fetching trading symbol for expiry type: ", expiry)
+  switch (expiry) {
+    case EXPIRY_TYPE.MONTHLY:
+      return getMonthlyExpiryTradingSymbol({ nfoSymbol, strike, instrumentType, tradingsymbol })
+    case EXPIRY_TYPE.NEXT:
+      return getNextExpiryTradingSymbol({ nfoSymbol, strike, instrumentType, tradingsymbol })
+    default:
+      return getCurrentExpiryTradingSymbol({ nfoSymbol, strike, instrumentType, tradingsymbol })
+  }
+}
+
+/**
+ * Derive the hedge option trading symbol for a short leg at a given strike.
+ * The hedge strike is offset from the short strike by `distance` step sizes in
+ * the protective direction (below for PE, above for CE).
+ *
+ * @param strike - The short leg's strike price.
+ * @param distance - Number of strike steps away from the short leg.
+ * @param type - Option type of the short leg: CE or PE.
+ * @param nfoSymbol - Underlying name (e.g. NIFTY, BANKNIFTY).
+ * @param expiryType - Which expiry to use for the hedge leg.
+ * @returns The trading symbol string for the hedge instrument, or undefined if not found.
+ */
+export const getHedgeForStrike = async ({
+  strike,
+  distance,
+  type,
+  nfoSymbol,
+  expiryType = EXPIRY_TYPE.CURRENT,
+}: {
+  strike: number
+  distance: number
+  type: string
+  nfoSymbol: string
+  expiryType: EXPIRY_TYPE
+}): Promise<string | undefined> => {
+  const hedgeStrike = strike + distance * (type === "PE" ? -1 : 1)
+  const { tradingsymbol } = (await getExpiryTradingSymbol({
+    nfoSymbol,
+    strike: hedgeStrike,
+    instrumentType: type,
+    expiry: expiryType,
+  })) as TradingSymbolInterface
+  return tradingsymbol
+}
+
+/**
+ * Check whether the user has sufficient margin to place a basket of orders.
+ * Compares available equity margin against the total initial margin required.
+ *
+ * @param user - Session user object containing a valid Kite access token.
+ * @param orders - Array of margin orders to evaluate.
+ * @returns `true` if margin is sufficient, `false` otherwise.
+ */
+export const ensureMarginForBasketOrder = async (user, orders) => {
+  const kite = syncGetKiteInstance(user)
+  const margins = await kite.getMargins()
+  const net = margins.equity?.net ?? 0
+  logger.info("[ensureMarginForBasketOrder]", { net })
+  const totalMarginRequired = await orderBasketMargins(user.session.access_token, orders)
+  logger.info("[ensureMarginForBasketOrder]", { totalMarginRequired })
+  const canPunch = totalMarginRequired < net
+  if (!canPunch) {
+    logger.error("🔴 [ensureMarginForBasketOrder] margin check failed!")
+  }
+  return canPunch
+}
+
+interface LTP_TYPE {
+  tradingsymbol: string
+  strike: number
+  last_price: number
+}
+
+interface TRADING_SYMBOL_BY_OPTION_PRICE_TYPE {
+  nfoSymbol?: string
+  price: number
+  instrumentType?: string
+  pivotStrike: number
+  user: SignalXUser
+  greaterThanEqualToPrice?: boolean
+  expiry?: EXPIRY_TYPE
+}
+
+/**
+ * Find the OTM CE and PE instruments whose last traded prices are closest to the target price.
+ * Fetches all OTM options for the given underlying around the pivot strike, prices them via
+ * the Kite LTP API, and returns the best-matching CE and PE pair.
+ *
+ * @param nfoSymbol - Underlying name (e.g. NIFTY, BANKNIFTY).
+ * @param price - Target option premium to match.
+ * @param pivotStrike - ATM strike used as the OTM search pivot.
+ * @param user - Session user object with a valid Kite access token.
+ * @param greaterThanEqualToPrice - When true, only consider options priced at or above target.
+ * @param expiry - Expiry type: CURRENT, NEXT, or MONTHLY.
+ * @returns Tuple of [CE instrument, PE instrument] closest to the target price.
+ */
+export const getOTMStrangleByOptionPrice = async ({
+  nfoSymbol,
+  price,
+  pivotStrike,
+  user,
+  greaterThanEqualToPrice = false,
+  expiry = EXPIRY_TYPE.CURRENT,
+}: TRADING_SYMBOL_BY_OPTION_PRICE_TYPE): Promise<Partial<Instrument>[]> => {
+  logger.info(
+    `[kiteUtils.getOTMStrangleByOptionPrice] nfoSymbol ${nfoSymbol}, price:${price}, pivotStrike:${pivotStrike}`
+  )
+  const kite = syncGetKiteInstance(user)
+  const expiryArray = await getNiftyOptionExpiries()
+  let expiryDate: string
+  if (expiry === EXPIRY_TYPE.CURRENT) expiryDate = expiryArray[0]
+  else if (expiry === EXPIRY_TYPE.NEXT) expiryDate = expiryArray[1]
+  else {
+    const month = dayjs(expiryArray[0]).month()
+    expiryDate = expiryArray[0]
+    for (let i = 1; i < 10; i++) {
+      if (!(month === dayjs(expiryArray[i]).month())) {
+        expiryDate = expiryArray[i - 1]
+        break
+      }
+    }
+  }
+
+  const otmCEOptions = await getOTMOptions({ nfoSymbol, strike: pivotStrike, instrumentType: "CE", expiry: expiryDate })
+  const otmPEOptions = await getOTMOptions({ nfoSymbol, strike: pivotStrike, instrumentType: "PE", expiry: expiryDate })
+
+  const otmCEInstruments = otmCEOptions.map(row => ({ exchange: kite.EXCHANGE_NFO, tradingSymbol: row.tradingsymbol }))
+  const otmPEInstruments = otmPEOptions.map(row => ({ exchange: kite.EXCHANGE_NFO, tradingSymbol: row.tradingsymbol }))
+
+  const otmCEPrices = await getMultipleInstrumentPrices(otmCEInstruments, user)
+  const otmPEPrices = await getMultipleInstrumentPrices(otmPEInstruments, user)
+
+  const getStrike = (inst: string) => Number(inst.replace(nfoSymbol!, "").slice(5, 10))
+
+  const CEformattedPrices: LTP_TYPE[] = otmCEInstruments.map(({ tradingSymbol }) => {
+    const { instrumentToken, lastPrice } = otmCEPrices[tradingSymbol]
+    return { tradingsymbol: tradingSymbol, strike: getStrike(tradingSymbol), instrument_token: instrumentToken, last_price: lastPrice }
+  })
+  const PEformattedPrices: LTP_TYPE[] = otmPEInstruments.map(({ tradingSymbol }) => {
+    const { instrumentToken, lastPrice } = otmPEPrices[tradingSymbol]
+    return { tradingsymbol: tradingSymbol, strike: getStrike(tradingSymbol), instrument_token: instrumentToken, last_price: lastPrice }
+  })
+
+  return [
+    closest(price, CEformattedPrices, "last_price", greaterThanEqualToPrice) as Partial<Instrument>,
+    closest(price, PEformattedPrices, "last_price", greaterThanEqualToPrice) as Partial<Instrument>,
+  ]
+}
+
+/**
+ * Find the single option instrument (CE or PE) whose LTP is closest to the target price,
+ * searching across 61 strikes centred on the pivot (30 on each side).
+ *
+ * @param nfoSymbol - Underlying name (e.g. NIFTY, BANKNIFTY).
+ * @param price - Target option premium to match.
+ * @param instrumentType - Option type to search: CE or PE.
+ * @param pivotStrike - Centre strike for the search range.
+ * @param user - Session user object with a valid Kite access token.
+ * @param greaterThanEqualToPrice - When true, only consider options priced at or above target.
+ * @param expiry - Expiry type: CURRENT, NEXT, or MONTHLY.
+ * @returns The instrument object closest in price to the target.
+ */
+export const getTradingSymbolsByOptionPrice = async ({
+  nfoSymbol,
+  price,
+  instrumentType,
+  pivotStrike,
+  user,
+  greaterThanEqualToPrice = false,
+  expiry = EXPIRY_TYPE.CURRENT,
+}: TRADING_SYMBOL_BY_OPTION_PRICE_TYPE): Promise<Partial<Instrument>> => {
+  const kite = syncGetKiteInstance(user)
+  const totalStrikes = 61
+  const { strikeStepSize } = INSTRUMENT_DETAILS[nfoSymbol!]
+  const strikes = [...new Array(totalStrikes)]
+    .map((_, idx) =>
+      idx === 0 ? idx : idx < totalStrikes / 2 ? idx * -1 : idx - Math.floor(totalStrikes / 2)
+    )
+    .map(idx => pivotStrike + idx * strikeStepSize)
+    .sort((a, b) => a - b)
+
+  const instruments = await Promise.map(strikes, async (strike: number) => {
+    const tradingSymbolInterface = (await getExpiryTradingSymbol({
+      nfoSymbol,
+      strike,
+      instrumentType,
+      expiry,
+    })) as TradingSymbolInterface
+    const tradingsymbol = tradingSymbolInterface?.tradingsymbol
+    logger.info(`[getTradingSymbolsByOptionPrice] Trading symbol is ${tradingsymbol}`)
+    return { exchange: kite.EXCHANGE_NFO, tradingSymbol: tradingsymbol }
+  })
+
+  const priceDataByTradingSymbol = await getMultipleInstrumentPrices(instruments, user)
+  const getStrike = (inst: string) => Number(inst.replace(nfoSymbol!, "").slice(5, 10))
+
+  const formattedPrices: LTP_TYPE[] = instruments.map(({ tradingSymbol }) => {
+    const { instrumentToken, lastPrice } = priceDataByTradingSymbol[tradingSymbol]
+    return { tradingsymbol: tradingSymbol, strike: getStrike(tradingSymbol), instrument_token: instrumentToken, last_price: lastPrice }
+  })
+
+  return closest(price, formattedPrices, "last_price", greaterThanEqualToPrice) as Partial<Instrument>
+}
+
+/**
+ * Place an order and ensure it reaches a confirmed terminal state, with retries.
+ * Handles freeze-quantity splitting, user abort checks, mock-order mode, broker
+ * NetworkException / OrderException recovery, and rejected-order retries.
+ *
+ * Resolves with `{ successful: true, response }` when all legs are confirmed,
+ * `{ successful: false }` when state cannot be determined within the timeout,
+ * or throws on exhausted retries or non-retryable broker errors.
+ *
+ * @param _kite - Pre-existing KiteConnect instance; derived from `user` if omitted.
+ * @param ensureOrderState - The target Kite order status to wait for (e.g. STATUS_COMPLETE).
+ * @param orderProps - Kite order payload to place.
+ * @param instrument - Instrument identifier used to look up the freeze quantity.
+ * @param onFailureRetryAfterMs - Delay in ms between retry attempts (default 15 s).
+ * @param retryAttempts - Maximum number of placement attempts (default 3).
+ * @param orderStatusCheckTimeout - Max ms to wait for the order to reach terminal state (default 2 min).
+ * @param remoteRetryTimeout - Max ms for `withRemoteRetry` calls during recovery (default 1 min).
+ * @param user - Session user object with a valid Kite access token.
+ * @param attemptCount - Internal retry counter; always pass 0 (or omit) from call sites.
+ */
+export const remoteOrderSuccessEnsurer = async (args: {
+  _kite?: Record<string, unknown>
+  ensureOrderState: string
+  orderProps: Partial<KiteOrder>
+  instrument: INSTRUMENTS
+  onFailureRetryAfterMs?: number
+  retryAttempts?: number
+  orderStatusCheckTimeout?: number
+  remoteRetryTimeout?: number
+  user: SignalXUser
+  attemptCount?: number
+}): Promise<{
+  successful: boolean
+  response?: KiteOrder[]
+}> => {
+  const {
+    _kite,
+    ensureOrderState,
+    orderProps,
+    onFailureRetryAfterMs = ms(15),
+    retryAttempts = 3,
+    orderStatusCheckTimeout = ms(2 * 60),
+    remoteRetryTimeout = ms(60),
+    user,
+    instrument,
+    attemptCount = 0,
+  } = args
+
+  if (attemptCount >= retryAttempts) {
+    logger.error("🔴 [remoteOrderSuccessEnsurer] all attempts exhausted. Terminating!")
+    throw Promise.TimeoutError
+  }
+
+  if (attemptCount > 0) {
+    await Promise.delay(onFailureRetryAfterMs)
+    logger.info("retry attempt", { attemptCount: attemptCount + 1, retryAttempts })
+  }
+
+  const dbTradeRows = await db
+    .select({ userOverride: jobExecutions.userOverride })
+    .from(jobExecutions)
+    .where(eq(jobExecutions.orderTag, orderProps.tag!))
+
+  const userOverride = dbTradeRows[0]?.userOverride
+  if (userOverride === USER_OVERRIDE.ABORT) {
+    logger.error("🔴 [remoteOrderSuccessEnsurer] user override ABORT. Terminating!")
+    throw Error(USER_OVERRIDE.ABORT)
+  }
+
+  const kite = (_kite ?? syncGetKiteInstance(user)) as any
+
+  const { freezeQty } = INSTRUMENT_DETAILS[instrument]
+  if (orderProps.quantity! > freezeQty) {
+    const ordersCount = Math.ceil(orderProps.quantity! / freezeQty)
+    const freezeQtyOrders = [...new Array(ordersCount).fill(null)].map((_, idx) => {
+      if (idx === ordersCount - 1) {
+        return { ...orderProps, quantity: orderProps.quantity! - idx * freezeQty }
+      }
+      return { ...orderProps, quantity: freezeQty }
+    })
+
+    const orderResults: any = await allSettled(
+      freezeQtyOrders.map(order => remoteOrderSuccessEnsurer({ ...args, orderProps: order }))
+    )
+
+    const isSuccessful = orderResults.every(
+      orderResult => orderResult.status === "fulfilled" && orderResult.value?.successful
+    )
+
+    return {
+      successful: isSuccessful,
+      response: orderResults
+        .map(orderResult =>
+          orderResult.status === "fulfilled" && orderResult.value?.successful
+            ? orderResult.value.response
+            : null
+        )
+        .filter(o => o)
+        .reduce((accum, ordersArr) => [...accum, ...ordersArr], []),
+    }
+  }
+
+  try {
+    const mockOrders = isMockOrder()
+    if (mockOrders) {
+      logger.info("mock order", orderProps)
+    }
+    logger.info(`[remoteOrderSuccessEnsurer] Order details are ${JSON.stringify(orderProps)}`)
+    const orderAckResponse = mockOrders
+      ? { order_id: "" }
+      : await placeOrder(kite, kite.VARIETY_REGULAR, orderProps as PlaceOrderParams)
+    const { order_id: ackOrderId } = orderAckResponse
+    const isOrderInUltimateStatePr = orderStateChecker(kite, ackOrderId, ensureOrderState)
+    try {
+      const ultimateStateOrder = await finiteStateChecker(
+        isOrderInUltimateStatePr,
+        orderStatusCheckTimeout
+      )
+      return { successful: true, response: [ultimateStateOrder] }
+    } catch (e) {
+      logger.error("🔴 [remoteOrderSuccessEnsurer] caught", e)
+      if (e instanceof Promise.TimeoutError) {
+        return { successful: false, response: [orderAckResponse] }
+      }
+      if (e?.message === kite.STATUS_REJECTED) {
+        logger.info("🟢 [remoteOrderSuccessEnsurer] retrying rejected order", orderProps)
+        return remoteOrderSuccessEnsurer({ ...args, attemptCount: attemptCount + 1 })
+      }
+      throw e
+    }
+  } catch (e) {
+    logger.error("🔴 [remoteOrderSuccessEnsurer] placeOrder failed?", e)
+
+    if (
+      e?.status === "error" &&
+      (e?.error_type === "PermissionException" || e?.error_type === "InputException")
+    ) {
+      logger.error("🔴 [remoteOrderSuccessEnsurer] non-retryable error", e?.error_type)
+      throw e
+    }
+
+    if (
+      e?.status === "error" &&
+      (e?.error_type === "NetworkException" || e?.error_type === "OrderException")
+    ) {
+      try {
+        const orders = await withRemoteRetry(() => kite.getOrders(), remoteRetryTimeout)
+        const matchedOrder = orders.find(
+          order =>
+            order.tag === orderProps.tag &&
+            order.tradingsymbol === orderProps.tradingsymbol &&
+            order.quantity === orderProps.quantity &&
+            order.product === orderProps.product &&
+            order.transaction_type === orderProps.transaction_type &&
+            order.exchange === orderProps.exchange
+        )
+
+        if (!matchedOrder) {
+          return remoteOrderSuccessEnsurer({ ...args, attemptCount: attemptCount + 1 })
+        }
+
+        const isMatchedOrderInUltimateStatePr = orderStateChecker(
+          kite,
+          matchedOrder.order_id,
+          ensureOrderState
+        )
+        try {
+          const ultimateStateOrder = await finiteStateChecker(
+            isMatchedOrderInUltimateStatePr,
+            orderStatusCheckTimeout
+          )
+          return { successful: true, response: [ultimateStateOrder] }
+        } catch (e) {
+          if (e?.message === kite.STATUS_REJECTED) {
+            return remoteOrderSuccessEnsurer({ ...args, attemptCount: attemptCount + 1 })
+          }
+          throw e
+        }
+      } catch (e) {
+        logger.error("🔴 [remoteOrderSuccessEnsurer] caught with no response from broker", e)
+        return { successful: false }
+      }
+    }
+
+    logger.error("🔴 [remoteOrderSuccessEnsurer] unhandled parent caught", e)
+    return { successful: false }
+  }
+}
+
+/**
+ * Fetch the next 40 FnO expiry instruments for the requested underlying and type,
+ * sorted by expiry date ascending and filtered to expiries from today onwards.
+ *
+ * @param nfoSymbol - Underlying symbol: NIFTY, BANKNIFTY, or FINNIFTY (default NIFTY).
+ * @param instrumentType - Instrument type to filter: CE, PE, or FUT (default CE).
+ * @returns Up to 40 Kite Instrument objects sorted by nearest expiry first.
  */
 const getFnOExpiriesRaw = async (
   nfoSymbol = "NIFTY", //NIFTY,BANKNIFTY,FINNIFTY
@@ -402,7 +1102,7 @@ const getFnOExpiriesRaw = async (
  * @returns A cached list of Kite Instrument objects for the requested filters.
  */
 export const getFnOExpiries = memoizer(getFnOExpiriesRaw, {
-  maxAge: dayjs().get("hours") < 18 ? ms(18 - dayjs().get("hours")) * 60 * 60 : ms(1 * 60),
+  maxAge: millisecondsTill7(),
   promise: true,
 })
 
@@ -412,7 +1112,7 @@ export const getFnOExpiries = memoizer(getFnOExpiriesRaw, {
  * @returns A cached list of expiry date strings in ascending order.
  */
 export const getNiftyOptionExpiries = memoizer(getFnOExpiries, {
-  maxAge: dayjs().get("hours") < 18 ? ms(18 - dayjs().get("hours")) * 60 * 60 : ms(1 * 60),
+  maxAge: millisecondsTill7(),
   promise: true,
 })
 
@@ -648,6 +1348,13 @@ export async function getMultipleInstrumentPrices(instruments: Array<{ exchange:
   return Object.fromEntries(results)
 }
 
+/**
+ * Fetch the net open position quantity for a given trading symbol.
+ *
+ * @param kite - Authenticated KiteConnect instance.
+ * @param tradingsymbol - Kite trading symbol to look up (e.g. NIFTY25JUNFUT).
+ * @returns Net quantity (positive for long, negative for short, 0 if no position).
+ */
 export async function getNetPositionQty(kite: any, tradingsymbol: string): Promise<number> {
   const positions = await kite.getPositions()
   const net = (positions.net as any[]).find((p: any) => p.tradingsymbol === tradingsymbol)

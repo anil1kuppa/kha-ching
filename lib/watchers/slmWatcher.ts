@@ -26,7 +26,9 @@ import { syncGetKiteInstance } from "../kiteUtils"
 import logger from "../logger"
 import { addToNextQueue } from "../queue"
 //, WATCHER_Q_NAME
-import { getInstrumentPrice, remoteOrderSuccessEnsurer, withRemoteRetry } from "../utils"
+import { getInstrumentPrice } from "../kiteUtils"
+import { remoteOrderSuccessEnsurer } from "../kiteUtils"
+import { withRemoteRetry } from "../utils"
 
 /**
  * [NB] IMPORTANT!

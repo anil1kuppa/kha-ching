@@ -3,21 +3,11 @@ import type Bluebird from "bluebird"
 import { any, Promise } from "bluebird"
 import dayjs, { type Dayjs } from "dayjs"
 import { eq } from "drizzle-orm"
-import type { Instrument, Order } from "kiteconnect"
-import { KiteConnect } from "kiteconnect"
 import type { KiteOrder } from "../types/kite"
-import type { SignalXUser } from "../types/misc"
-import { SUPPORTED_TRADE_CONFIG } from "../types/trade"
 import {
-  ACCESSTOKEN,
-  COMPLETED_BY_TAG,
   ERROR_STRINGS,
   EXIT_STRATEGIES,
-  EXPIRY_TYPE,
-  INSTRUMENT_DETAILS,
-  type INSTRUMENTS,
   TRADES,
-  USER_OVERRIDE,
 } from "./constants"
 import { db } from "./drizzle"
 // This function has been moved to Drizzle-backed utilities to use the job_executions table
@@ -27,17 +17,6 @@ import {
   storeAccessToken,
 } from "./drizzleDbUtils"
 import { allSettled, type allSettledInterface } from "./es6-promise"
-import {
-  getIndexInstruments,
-  getFnOExpiries,
-  getNiftyOptionExpiries,
-  getCompletedOrdersbyTag as getCompletedOrdersbyTagFromKite,
-  getMultipleInstrumentPrices,
-  placeOrder as kitePlaceOrder,
-  orderBasketMargins,
-  type PlaceOrderParams,
-  syncGetKiteInstance,
-} from "./kiteUtils"
 import logger from "./logger"
 import { jobExecutions } from "./schema"
 import { COMPLETED_ORDER_RESPONSE } from "./strategies/mockData/orderResponse"
@@ -51,25 +30,6 @@ import utc from "dayjs/plugin/utc"
 dayjs.extend(utc)
 dayjs.extend(timezone)
 dayjs.extend(isSameOrBefore)
-
-
-
-export type TradingSymbolInterface = Instrument
-export interface StrikeInterface {
-  PE_STRING: string
-  CE_STRING: string
-  LOT_SIZE: number
-}
-
-interface GET_LTP_ARGS {
-  exchange: string
-  tradingSymbol: string
-}
-
-export interface GET_LTP_RESPONSE extends GET_LTP_ARGS {
-  instrumentToken: string
-  lastPrice: number
-}
 
 const MOCK_ORDERS = process.env.MOCK_ORDERS ? JSON.parse(process.env.MOCK_ORDERS) : false
 const KITE_API_KEY = process.env.KITE_API_KEY
@@ -95,6 +55,19 @@ export const ms = seconds => seconds * 1000
 export const toIst = (value: dayjs.Dayjs | Date | string): dayjs.Dayjs => {
   return dayjs(value).tz("Asia/Kolkata")
 }
+
+/** Seconds until next 7 AM IST. Used for session TTL. */
+export const secondsTill7 = (): number => {
+  const nowIst = toIst(new Date())
+  const next7AmIst =
+    nowIst.hour() >= 7
+      ? nowIst.add(1, "day").startOf("day").hour(7)
+      : nowIst.startOf("day").hour(7)
+  return next7AmIst.diff(nowIst, "second")
+}
+
+/** Milliseconds until 7 AM IST (next occurrence). Used for memoizer maxAge. */
+export const millisecondsTill7 = (): number => secondsTill7() * 1000
 
 /**
  * Post a simple text message to configured Slack Incoming Webhook URL.
@@ -136,274 +109,6 @@ export const delay = ms =>
 export const getMisOrderLastSquareOffTime = () =>
   dayjs().set("hour", 15).set("minutes", 24).set("seconds", 0).format()
 
-const getSortedMatchingIntrumentsData = async ({
-  nfoSymbol, //NIFTY,BANKNIFTY,FINNIFTY
-  strike,
-  instrumentType, //CE,PE,FUT
-  tradingsymbol,
-}: {
-  nfoSymbol?: string
-  strike?: number
-  instrumentType?: string
-  tradingsymbol?: string
-}): Promise<Instrument[]> => {
-  const instrumentsData = await getIndexInstruments()
-  const rows: Instrument[] = instrumentsData
-    .filter(
-      item =>
-        (nfoSymbol ? item.name === nfoSymbol : true) &&
-        (strike ? item.strike == strike : true) && // eslint-disable-line
-        (tradingsymbol ? item.tradingsymbol === tradingsymbol : true) &&
-        (instrumentType ? item.instrument_type === instrumentType : true)
-    )
-    .sort((row1, row2) => (dayjs(row1.expiry).isSameOrBefore(dayjs(row2.expiry)) ? -1 : 1))
-  return rows
-}
-/*
-Returns array of OTM Options
-*/
-const getOTMOptions = async ({
-  nfoSymbol, //NIFTY,BANKNIFTY,FINNIFTY
-  strike,
-  instrumentType, //CE,PE,FUT
-  expiry,
-}: {
-  nfoSymbol?: string
-  strike?: number
-  instrumentType?: string
-  expiry?: string
-}): Promise<Instrument[]> => {
-  const instrumentsData = await getIndexInstruments()
-  const rows: Instrument[] = instrumentsData
-    .filter(
-      item =>
-        (nfoSymbol ? item.name === nfoSymbol : true) &&
-        (strike ? (instrumentType === "CE" ? item.strike > strike : item.strike < strike) : true) &&
-        //  (strike ? item.strike == strike : true) && // eslint-disable-line
-        (instrumentType ? item.instrument_type === instrumentType : true) &&
-        (expiry ? item.expiry === expiry : true)
-    )
-    .sort((row1, row2) => (row1.strike < row2.strike ? -1 : 1))
-  return rows
-}
-
-/**
- * Fetch OHLC data for a given symbol using Kite and return trend/last price.
- * @param kite - Kite connect instance
- * @param symbol - exchange:tradingsymbol string
- */
-export async function getOHLC({ kite, symbol, instrument }): Promise<any> {
-  try {
-    //console.log(`Checking ${await kite.getOHLC([NIFTY,BANKNIFTY])}`);
-    const data = await kite.getOHLC(symbol)
-    //console.log(`checking ${await kite.getOHLC(["NSE:NIFTY 50","NSE:NIFTY BANK"])}`);
-    logger.info("getOHLC data", data)
-    if (data[symbol].last_price < data[symbol].ohlc.open) data[symbol].trend = "CE"
-    else data[symbol].trend = "PE"
-
-    return {
-      trend: data[symbol].trend,
-      last_price: data[symbol].last_price,
-    }
-    //  data=await kite.getOHLC("NSE:NIFTY BANK");
-    // //console.log(`checking ${await kite.getOHLC(["NSE:NIFTY 50","NSE:NIFTY BANK"])}`);
-    // console.log(`Another ${data}`);
-    // logDeep(data);
-  } catch (e) {
-    logger.info(`Excpetion is coming: ${e}`)
-  }
-
-  /* export async function getInstrumentPrice (
-    kite,
-    underlying: string,
-    exchange: string
-  ): Promise<number> {
-    const instrumentString = `${exchange}:${underlying}`
-    const underlyingRes = await kite.getLTP(instrumentString)
-    return Number(underlyingRes[instrumentString].last_price)
-  }
-  */
-}
-
-/**
- * Resolve a trading symbol or strike object for a given expiry type.
- * @param params - lookup parameters including nfoSymbol, strike, instrumentType
- */
-export const getExpiryTradingSymbol = async ({
-  nfoSymbol,
-  strike,
-  instrumentType,
-  tradingsymbol,
-  expiry = EXPIRY_TYPE.CURRENT,
-}: {
-  nfoSymbol?: string
-  strike?: number
-  instrumentType?: string
-  tradingsymbol?: string
-  expiry?: EXPIRY_TYPE
-}): Promise<TradingSymbolInterface | StrikeInterface | null> => {
-  logger.info("Fetching trading symbol for expiry type: ", expiry)
-  switch (expiry) {
-    case EXPIRY_TYPE.MONTHLY:
-      return getMonthlyExpiryTradingSymbol({
-        nfoSymbol,
-        strike,
-        instrumentType,
-        tradingsymbol,
-      })
-
-    case EXPIRY_TYPE.NEXT:
-      return getNextExpiryTradingSymbol({
-        nfoSymbol,
-        strike,
-        instrumentType,
-        tradingsymbol,
-      })
-
-    default:
-      return getCurrentExpiryTradingSymbol({
-        nfoSymbol,
-        strike,
-        instrumentType,
-        tradingsymbol,
-      })
-  }
-}
-
-/**
- * Get the current expiry trading symbol (CE/PE or FUT) for a strike or instrument.
- */
-export const getCurrentExpiryTradingSymbol = async ({
-  nfoSymbol,
-  strike,
-  instrumentType,
-  tradingsymbol,
-}: {
-  nfoSymbol?: string
-  strike?: number
-  instrumentType?: string
-  tradingsymbol?: string
-}): Promise<TradingSymbolInterface | StrikeInterface | null> => {
-  const rows = await getSortedMatchingIntrumentsData({
-    nfoSymbol,
-    strike,
-    instrumentType,
-    tradingsymbol,
-  })
-
-  if (instrumentType) {
-    return rows.length ? rows[0] : null
-  }
-  // get first two entries for current expiry
-  const relevantRows = rows.slice(0, 2)
-
-  const peStrike = relevantRows?.find(item => item.instrument_type === "PE")?.tradingsymbol
-  const ceStrike = relevantRows?.find(item => item.instrument_type === "CE")?.tradingsymbol
-  const lotSize = relevantRows?.find(item => item.instrument_type === "PE")?.lot_size
-
-  if (!peStrike || !ceStrike) return null
-
-  return {
-    PE_STRING: peStrike,
-    CE_STRING: ceStrike,
-    LOT_SIZE: Number(lotSize!),
-  }
-}
-
-/**
- * Get the next expiry trading symbol for a strike or instrument.
- */
-export const getNextExpiryTradingSymbol = async ({
-  nfoSymbol,
-  strike,
-  instrumentType,
-  tradingsymbol,
-}: {
-  nfoSymbol?: string
-  strike?: number
-  instrumentType?: string
-  tradingsymbol?: string
-}): Promise<TradingSymbolInterface | StrikeInterface | null> => {
-  const rows = await getSortedMatchingIntrumentsData({
-    nfoSymbol,
-    strike,
-    instrumentType,
-    tradingsymbol,
-  })
-
-  if (instrumentType) {
-    return rows.length ? rows[1] : null
-  }
-  // first two entries are CE and PE for current week. So taking the next two items here
-  const relevantRows = rows.slice(2, 4)
-
-  const peStrike = relevantRows?.find(item => item.instrument_type === "PE")?.tradingsymbol
-  const ceStrike = relevantRows?.find(item => item.instrument_type === "CE")?.tradingsymbol
-  const lotSize = relevantRows?.find(item => item.instrument_type === "PE")?.lot_size
-
-  if (!peStrike || !ceStrike) return null
-
-  return {
-    PE_STRING: peStrike,
-    CE_STRING: ceStrike,
-    LOT_SIZE: Number(lotSize!),
-  }
-}
-
-/**
- * Get the monthly expiry trading symbol, handling month boundary cases.
- */
-export const getMonthlyExpiryTradingSymbol = async ({
-  nfoSymbol,
-  strike,
-  instrumentType,
-  tradingsymbol,
-}: {
-  nfoSymbol?: string
-  strike?: number
-  instrumentType?: string
-  tradingsymbol?: string
-}): Promise<TradingSymbolInterface | StrikeInterface | null> => {
-  const instrumentsData = await getSortedMatchingIntrumentsData({
-    nfoSymbol,
-    strike,
-    instrumentType,
-    tradingsymbol,
-  })
-
-  // get current calendar month expiries
-  let rows = instrumentsData.filter(
-    item => dayjs().get("month") === dayjs(item.expiry).get("month")
-  )
-
-  //get next calendar month expiries
-  if (!rows.length) {
-    const month = dayjs().get("month") === 11 ? 0 : dayjs().get("month") // to handle December current year & Jan next year cases
-    rows = instrumentsData.filter(item => dayjs(item.expiry).get("month") === month)
-  }
-  rows = rows.sort((row1, row2) => (dayjs(row1.expiry).isSameOrBefore(dayjs(row2.expiry)) ? -1 : 1))
-
-  const rowsLength = rows.length
-
-  if (instrumentType) {
-    return rows.length ? rows[rowsLength - 1] : null
-  }
-  // get last two entries for monthly expiry
-  const relevantRows = rows.slice(rowsLength - 2, rowsLength)
-
-  const peStrike = relevantRows?.find(item => item.instrument_type === "PE")?.tradingsymbol
-  const ceStrike = relevantRows?.find(item => item.instrument_type === "CE")?.tradingsymbol
-  const lotSize = relevantRows?.find(item => item.instrument_type === "PE")?.lot_size
-
-  if (!peStrike || !ceStrike) return null
-
-  return {
-    PE_STRING: peStrike,
-    CE_STRING: ceStrike,
-    LOT_SIZE: Number(lotSize!),
-  }
-}
-
 /**
  * Calculate percentage change between two prices.
  * @param price1
@@ -413,39 +118,6 @@ export const getMonthlyExpiryTradingSymbol = async ({
 export function getPercentageChange(price1: number, price2: number, mode = "AGGRESIVE"): number {
   const denominator = mode === "AGGRESIVE" ? (price1 + price2) / 2 : Math.min(price1, price2)
   return Math.floor((Math.abs(price1 - price2) / denominator) * 100)
-}
-
-/**
- * Fetch last traded price for an instrument using Kite LTP API.
- * @param kite - Kite instance
- * @param underlying - trading symbol
- * @param exchange - exchange string
- */
-export async function getInstrumentPrice(
-  kite,
-  underlying: string,
-  exchange: string
-): Promise<number> {
-  const instrumentString = `${exchange}:${underlying}`
-  const underlyingRes = await kite.getLTP(instrumentString)
-  return Number(underlyingRes[instrumentString].last_price)
-}
-
-/**
- * Calculate price skew between two instruments using their LTPs.
- */
-export async function getSkew(kite, instrument1, instrument2, exchange) {
-  const [price1, price2] = await Promise.all([
-    getInstrumentPrice(kite, instrument1, exchange),
-    getInstrumentPrice(kite, instrument2, exchange),
-  ])
-
-  const skew = getPercentageChange(price1, price2)
-  return {
-    [instrument1]: price1,
-    [instrument2]: price2,
-    skew,
-  }
 }
 
 /**
@@ -744,29 +416,6 @@ export const getNextNthMinute = intervalMs => {
 }
 
 /**
- * Ensure user has sufficient margin for a basket order by checking Kite margins.
- * @returns boolean whether order can be placed
- */
-export const ensureMarginForBasketOrder = async (user, orders) => {
-  const kite = syncGetKiteInstance(user)
-  const margins = await kite.getMargins()
-  const net = margins.equity?.net ?? 0
-
-  logger.info("[ensureMarginForBasketOrder]", { net })
-
-  const totalMarginRequired = await orderBasketMargins(user.session.access_token, orders)
-
-  logger.info("[ensureMarginForBasketOrder]", { totalMarginRequired })
-
-  const canPunch = totalMarginRequired < net
-  if (!canPunch) {
-    logger.error("🔴 [ensureMarginForBasketOrder] margin check failed!")
-  }
-
-  return canPunch
-}
-
-/**
  * Check whether market is currently open (based on hard-coded session times).
  */
 export const isMarketOpen = (time = dayjs()) => {
@@ -816,189 +465,6 @@ export function closest(
   return filtered.reduce((prev, curr) =>
     Math.abs(curr[haystackKey] - needle) < Math.abs(prev[haystackKey] - needle) ? curr : prev
   )
-}
-
-interface TRADING_SYMBOL_BY_OPTION_PRICE_TYPE {
-  nfoSymbol?: string
-  price: number
-  instrumentType?: string
-  pivotStrike: number
-  user: SignalXUser
-  greaterThanEqualToPrice?: boolean
-  expiry?: EXPIRY_TYPE
-}
-
-// `getMultipleInstrumentPrices` moved to `lib/kiteUtils.ts` and now uses the Kite SDK.
-
-/**
- * Given a target option price and pivot, return the OTM strangle instruments.
- */
-export const getOTMStrangleByOptionPrice = async ({
-  nfoSymbol,
-  price,
-  pivotStrike,
-  user,
-  greaterThanEqualToPrice = false,
-  expiry = EXPIRY_TYPE.CURRENT,
-}: TRADING_SYMBOL_BY_OPTION_PRICE_TYPE): Promise<Partial<Instrument>[]> => {
-  logger.info(
-    `[utils.getOTMStrangleByOptionPrice] nfoSymbol ${nfoSymbol}, price:${price}, pivotStrike:${pivotStrike}`
-  )
-  const kite = syncGetKiteInstance(user)
-  const expiryArray = await getNiftyOptionExpiries()
-  let expiryDate: string
-  if (expiry === EXPIRY_TYPE.CURRENT) expiryDate = expiryArray[0]
-  else if (expiry === EXPIRY_TYPE.NEXT) expiryDate = expiryArray[1]
-  else {
-    const month = dayjs(expiryArray[0]).month()
-    expiryDate = expiryArray[0]
-    for (let i = 1; i < 10; i++) {
-      if (!(month === dayjs(expiryArray[i]).month())) {
-        expiryDate = expiryArray[i - 1]
-        break
-      }
-    }
-  }
-
-  const otmCEOptions = await getOTMOptions({
-    nfoSymbol,
-    strike: pivotStrike,
-    instrumentType: "CE",
-    expiry: expiryDate,
-  })
-  const otmPEOptions = await getOTMOptions({
-    nfoSymbol,
-    strike: pivotStrike,
-    instrumentType: "PE",
-    expiry: expiryDate,
-  })
-
-  const otmCEInstruments = otmCEOptions.map(row => ({
-    exchange: kite.EXCHANGE_NFO,
-    tradingSymbol: row.tradingsymbol,
-  }))
-
-  const otmPEInstruments = otmPEOptions.map(row => ({
-    exchange: kite.EXCHANGE_NFO,
-    tradingSymbol: row.tradingsymbol,
-  }))
-
-  //   await Promise.map(strikes, async strike => {
-  //     const tradingSymbolInterface= (await getExpiryTradingSymbol({
-  //       nfoSymbol,
-  //       strike,
-  //       instrumentType,
-  //       expiry
-  //     })) as TradingSymbolInterface
-  //     const tradingsymbol=tradingSymbolInterface?.tradingsymbol
-  //  logger.info(`[getTradingSymbolsByOptionPrice] Trading symbol is ${tradingsymbol}`)
-  //     return {
-  //       exchange: kite.EXCHANGE_NFO,
-  //       tradingSymbol: tradingsymbol
-  //     }
-  //   })
-
-  const otmCEPrices = await getMultipleInstrumentPrices(otmCEInstruments, user)
-
-  const otmPEPrices = await getMultipleInstrumentPrices(otmPEInstruments, user)
-
-  const getStrike = inst => {
-    const withoutNfoSymbol = inst.replace(nfoSymbol, "")
-    const withoutExpiryDetails = withoutNfoSymbol.substr(5, 5)
-    return Number(withoutExpiryDetails)
-  }
-
-  const CEformattedPrices: LTP_TYPE[] = otmCEInstruments.map(({ tradingSymbol }) => {
-    const { instrumentToken, lastPrice } = otmCEPrices[tradingSymbol]
-    return {
-      tradingsymbol: tradingSymbol,
-      strike: getStrike(tradingSymbol),
-      instrument_token: instrumentToken,
-      last_price: lastPrice,
-    }
-  })
-
-  const PEformattedPrices: LTP_TYPE[] = otmPEInstruments.map(({ tradingSymbol }) => {
-    const { instrumentToken, lastPrice } = otmPEPrices[tradingSymbol]
-    return {
-      tradingsymbol: tradingSymbol,
-      strike: getStrike(tradingSymbol),
-      instrument_token: instrumentToken,
-      last_price: lastPrice,
-    }
-  })
-
-  const CEInstrument: Partial<Instrument> = closest(
-    price,
-    CEformattedPrices,
-    "last_price",
-    greaterThanEqualToPrice
-  )
-  const PEInstrument: Partial<Instrument> = closest(
-    price,
-    PEformattedPrices,
-    "last_price",
-    greaterThanEqualToPrice
-  )
-  return [CEInstrument, PEInstrument]
-}
-
-/**
- * Find trading symbols matching a target option price near a pivot strike.
- */
-export const getTradingSymbolsByOptionPrice = async ({
-  nfoSymbol,
-  price,
-  instrumentType,
-  pivotStrike,
-  user,
-  greaterThanEqualToPrice = false,
-  expiry = EXPIRY_TYPE.CURRENT,
-}: TRADING_SYMBOL_BY_OPTION_PRICE_TYPE): Promise<Partial<Instrument>> => {
-  const kite = syncGetKiteInstance(user)
-  const totalStrikes = 61 // pivot and 30 on each side
-  const { strikeStepSize } = INSTRUMENT_DETAILS[nfoSymbol!]
-  const strikes = [...new Array(totalStrikes)]
-    .map((_, idx) =>
-      idx === 0 ? idx : idx < totalStrikes / 2 ? idx * -1 : idx - Math.floor(totalStrikes / 2)
-    )
-    .map(idx => pivotStrike + idx * strikeStepSize)
-    .sort((a, b) => a - b)
-
-  const instruments = await Promise.map(strikes, async strike => {
-    const tradingSymbolInterface = (await getExpiryTradingSymbol({
-      nfoSymbol,
-      strike,
-      instrumentType,
-      expiry,
-    })) as TradingSymbolInterface
-    const tradingsymbol = tradingSymbolInterface?.tradingsymbol
-    logger.info(`[getTradingSymbolsByOptionPrice] Trading symbol is ${tradingsymbol}`)
-    return {
-      exchange: kite.EXCHANGE_NFO,
-      tradingSymbol: tradingsymbol,
-    }
-  })
-
-  const priceDataByTradingSymbol = await getMultipleInstrumentPrices(instruments, user)
-
-  const getStrike = inst => {
-    const withoutNfoSymbol = inst.replace(nfoSymbol, "")
-    const withoutExpiryDetails = withoutNfoSymbol.substr(5, 5)
-    return Number(withoutExpiryDetails)
-  }
-
-  const formattedPrices: LTP_TYPE[] = instruments.map(({ tradingSymbol }) => {
-    const { instrumentToken, lastPrice } = priceDataByTradingSymbol[tradingSymbol]
-    return {
-      tradingsymbol: tradingSymbol,
-      strike: getStrike(tradingSymbol),
-      instrument_token: instrumentToken,
-      last_price: lastPrice,
-    }
-  })
-
-  return closest(price, formattedPrices, "last_price", greaterThanEqualToPrice)
 }
 
 /**
@@ -1163,234 +629,6 @@ export const orderStateChecker = (kite, orderId, ensureOrderState) => {
   })
 }
 
-/**
- *
- * @returns
- * throws `Promise.Timedout`
- * which means it tried for X number of times
- * and still couldn't place it determinstically (doesn't exist will broker as well - confirmed!)
- *
- *
- * or resolves with
- * { successful: true, response: orderHistoryStateObject } or
- * { successful: false, response?: orderAckResponse }
- * which means order was placed, but its status couldn't be determined within `orderStatusCheckTimeout`
- * receiving `false` is a tricky situation to be in - and it shouldn't happen in an ideal world
- */
-/**
- * Place an order and ensure it reaches an ultimate state (or retry/handle failures).
- */
-export const remoteOrderSuccessEnsurer = async (args: {
-  _kite?: Record<string, unknown>
-  ensureOrderState: string
-  orderProps: Partial<KiteOrder>
-  instrument: INSTRUMENTS
-  onFailureRetryAfterMs?: number
-  retryAttempts?: number
-  orderStatusCheckTimeout?: number
-  remoteRetryTimeout?: number
-  user: SignalXUser
-  attemptCount?: number
-}): Promise<{
-  successful: boolean
-  response?: KiteOrder[]
-}> => {
-  const {
-    _kite,
-    ensureOrderState,
-    orderProps,
-    onFailureRetryAfterMs = ms(15),
-    retryAttempts = 3,
-    orderStatusCheckTimeout = ms(2 * 60),
-    remoteRetryTimeout = ms(60),
-    user,
-    instrument,
-    attemptCount = 0,
-  } = args
-
-  if (attemptCount >= retryAttempts) {
-    logger.error("🔴 [remoteOrderSuccessEnsurer] all attempts exhausted. Terminating!")
-    throw Promise.TimeoutError
-  }
-
-  if (attemptCount > 0) {
-    await Promise.delay(onFailureRetryAfterMs)
-    logger.info("retry attempt", { attemptCount: attemptCount + 1, retryAttempts })
-  }
-
-  const dbTradeRows = await db
-    .select({ userOverride: jobExecutions.userOverride })
-    .from(jobExecutions)
-    .where(eq(jobExecutions.orderTag, orderProps.tag!))
-
-  const userOverride = dbTradeRows[0]?.userOverride
-  if (userOverride === USER_OVERRIDE.ABORT) {
-    logger.error("🔴 [remoteOrderSuccessEnsurer] user override ABORT. Terminating!")
-    throw Error(USER_OVERRIDE.ABORT)
-  }
-
-  const kite = (_kite ?? syncGetKiteInstance(user)) as any
-
-  const { freezeQty } = INSTRUMENT_DETAILS[instrument]
-  if (orderProps.quantity! > freezeQty) {
-    // if more than freeze quantity, split quantity into freezeQty orders
-    const ordersCount = Math.ceil(orderProps.quantity! / freezeQty)
-    const freezeQtyOrders = [...new Array(ordersCount).fill(null)].map((_, idx) => {
-      if (idx === ordersCount - 1) {
-        // last order with qty <= freezeQty
-        return {
-          ...orderProps,
-          quantity: orderProps.quantity! - idx * freezeQty,
-        }
-      }
-      return {
-        ...orderProps,
-        quantity: freezeQty,
-      }
-    })
-
-    const orderResults: any = await allSettled(
-      freezeQtyOrders.map(order =>
-        remoteOrderSuccessEnsurer({
-          ...args,
-          orderProps: order,
-        })
-      )
-    )
-
-    const isSuccessful = orderResults.every(
-      orderResult => orderResult.status === "fulfilled" && orderResult.value?.successful
-    )
-
-    return {
-      successful: isSuccessful,
-      response: orderResults
-        .map(orderResult =>
-          orderResult.status === "fulfilled" && orderResult.value?.successful
-            ? orderResult.value.response
-            : null
-        )
-        .filter(o => o)
-        .reduce((accum, ordersArr) => [...accum, ...ordersArr], []),
-    }
-  }
-
-  try {
-    const mockOrders = isMockOrder()
-    if (mockOrders) {
-      logger.info("mock order", orderProps)
-    }
-    logger.info(`[remoteOrderSuccessEnsurer] Order details are ${JSON.stringify(orderProps)}`)
-    const orderAckResponse = mockOrders
-      ? { order_id: "" }
-      : await kitePlaceOrder(kite, kite.VARIETY_REGULAR, orderProps as PlaceOrderParams)
-    const { order_id: ackOrderId } = orderAckResponse
-    const isOrderInUltimateStatePr = orderStateChecker(kite, ackOrderId, ensureOrderState)
-    try {
-      const ultimateStateOrder = await finiteStateChecker(
-        isOrderInUltimateStatePr,
-        orderStatusCheckTimeout
-      )
-      return {
-        successful: true,
-        response: [ultimateStateOrder],
-      }
-    } catch (e) {
-      // should only reach here if it had a rejected status or finiteStateChecker timedout
-      logger.error("🔴 [remoteOrderSuccessEnsurer] caught", e)
-      if (e instanceof Promise.TimeoutError) {
-        return {
-          successful: false,
-          response: [orderAckResponse],
-        }
-      }
-      if (e?.message === kite.STATUS_REJECTED) {
-        logger.info("🟢 [remoteOrderSuccessEnsurer] retrying rejected order", orderProps)
-        return remoteOrderSuccessEnsurer({
-          ...args,
-          attemptCount: attemptCount + 1,
-        })
-      }
-      throw e
-    }
-  } catch (e) {
-    // will reach here if kite.placeOrder fails with some error
-    logger.error("🔴 [remoteOrderSuccessEnsurer] placeOrder failed?", e)
-
-    // Non-retryable errors should be thrown immediately
-    if (
-      e?.status === "error" &&
-      (e?.error_type === "PermissionException" || e?.error_type === "InputException")
-    ) {
-      logger.error("🔴 [remoteOrderSuccessEnsurer] non-retryable error", e?.error_type)
-      throw e
-    }
-
-    if (
-      e?.status === "error" &&
-      (e?.error_type === "NetworkException" || e?.error_type === "OrderException")
-    ) {
-      // we cannot simply retry - don't know where the request failed inflight
-      // check at the broker's end - if the order exists with that tag or not
-
-      try {
-        const orders = await withRemoteRetry(() => kite.getOrders(), remoteRetryTimeout)
-        const matchedOrder = orders.find(
-          order =>
-            order.tag === orderProps.tag &&
-            order.tradingsymbol === orderProps.tradingsymbol &&
-            order.quantity === orderProps.quantity &&
-            order.product === orderProps.product &&
-            order.transaction_type === orderProps.transaction_type &&
-            order.exchange === orderProps.exchange
-        )
-
-        if (!matchedOrder) {
-          // orders api responded successfully and we didn't find a matching order
-          // so reattempt the order
-          return remoteOrderSuccessEnsurer({
-            ...args,
-            attemptCount: attemptCount + 1,
-          })
-        }
-
-        // order found
-        // ensure that it's in the expected state
-        const isMatchedOrderInUltimateStatePr = orderStateChecker(
-          kite,
-          matchedOrder.order_id,
-          ensureOrderState
-        )
-        try {
-          const ultimateStateOrder = await finiteStateChecker(
-            isMatchedOrderInUltimateStatePr,
-            orderStatusCheckTimeout
-          )
-          return {
-            successful: true,
-            response: [ultimateStateOrder],
-          }
-        } catch (e) {
-          if (e?.message === kite.STATUS_REJECTED) {
-            return remoteOrderSuccessEnsurer({
-              ...args,
-              attemptCount: attemptCount + 1,
-            })
-          }
-          throw e
-        }
-      } catch (e) {
-        // case - tried getting orders for 1 min, but no response from broker
-        logger.error("🔴 [remoteOrderSuccessEnsurer] caught with no response from broker", e)
-        return { successful: false }
-      }
-    }
-
-    logger.error("🔴 [remoteOrderSuccessEnsurer] unhandled parent caught", e)
-    return { successful: false }
-  }
-}
-
 // gets the current data from DB
 /**
  * Fetch job execution values from DB by id.
@@ -1413,15 +651,6 @@ export const patchDbTrade = async ({
   return patchDbTradeFromDb(id, patchProps)
 }
 
-/*
-Points: sell - buy
-Quantity: Sell is positive, buy is negative similar to kite positions
-DEPRECATED: Use kiteUtils.getCompletedOrdersbyTag instead - moved to kiteUtils.ts
-*/
-/**
- * Alias for kiteUtils.getCompletedOrdersbyTag.
- */
-export const getCompletedOrdersbyTag = getCompletedOrdersbyTagFromKite
 
 /**
  * Attempt multiple broker orders in parallel and return aggregated success state.
@@ -1465,33 +694,6 @@ export const attemptBrokerOrders = async (
   }
 }
 
-/**
- * Get the tradingsymbol used to hedge a given strike with distance and type.
- */
-export const getHedgeForStrike = async ({
-  strike,
-  distance,
-  type,
-  nfoSymbol,
-  expiryType = EXPIRY_TYPE.CURRENT,
-}: {
-  strike: number
-  distance: number
-  type: string
-  nfoSymbol: string
-  expiryType: EXPIRY_TYPE
-}): Promise<string | undefined> => {
-  const hedgeStrike = strike + distance * (type === "PE" ? -1 : 1)
-
-  const { tradingsymbol } = (await getExpiryTradingSymbol({
-    nfoSymbol,
-    strike: hedgeStrike,
-    instrumentType: type,
-    expiry: expiryType,
-  })) as TradingSymbolInterface
-
-  return tradingsymbol
-}
 
 export interface apiResponseObject {
   PutDelta: number
@@ -1540,4 +742,3 @@ export function round(value: number, step = 0.5): number {
   return Math.round(value * inv) / inv
 }
 
-export { getIndexInstruments }

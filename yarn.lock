@@ -5406,17 +5406,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"csvtojson@npm:^2.0.10":
-  version: 2.0.14
-  resolution: "csvtojson@npm:2.0.14"
-  dependencies:
-    lodash: "npm:^4.17.21"
-  bin:
-    csvtojson: bin/csvtojson
-  checksum: 10c0/94f35e903560e428e8ab922c3f122d46e921df616754577e410d79a50d6405c145ac64d01e825ae6238254d8024cd1c5acddacf2c6b4b38ad1c08bee1a900851
-  languageName: node
-  linkType: hard
-
 "d@npm:1, d@npm:^1.0.1, d@npm:^1.0.2":
   version: 1.0.2
   resolution: "d@npm:1.0.2"
@@ -8705,7 +8694,6 @@ __metadata:
     babel-jest: "npm:^27.0.6"
     bluebird: "npm:^3.7.2"
     bullmq: "npm:^5.73.3"
-    csvtojson: "npm:^2.0.10"
     date-fns: "npm:^2.19.0"
     dayjs: "npm:^1.10.4"
     dotenv: "npm:^10.0.0"

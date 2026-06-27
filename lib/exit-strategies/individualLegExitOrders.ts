@@ -8,11 +8,11 @@ import { syncGetKiteInstance } from "../kiteUtils"
 import logger from "../logger"
 import { addToNextQueue, TARGETPNL_Q_NAME } from "../queue"
 import orderResponse from "../strategies/mockData/orderResponse"
+import { remoteOrderSuccessEnsurer } from "../kiteUtils"
 import {
   attemptBrokerOrders,
   isUntestedFeaturesEnabled,
   logDeep,
-  remoteOrderSuccessEnsurer,
   round,
 } from "../utils"
 import { doDeletePendingOrders, doSquareOffPositions } from "./autoSquareOff"

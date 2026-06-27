@@ -7,13 +7,11 @@ import type {
 } from "../../types/trade"
 import { USER_OVERRIDE } from "../constants"
 import { db } from "../drizzle"
-import { type PlaceOrderParams, placeOrder, syncGetKiteInstance } from "../kiteUtils"
+import { type PlaceOrderParams, placeOrder, syncGetKiteInstance, getCompletedOrdersbyTag, remoteOrderSuccessEnsurer } from "../kiteUtils"
 import logger from "../logger"
 import { jobExecutions } from "../schema"
 import {
-  getCompletedOrdersbyTag,
   patchDbTrade,
-  remoteOrderSuccessEnsurer,
   withRemoteRetry,
 } from "../utils"
 

@@ -4,8 +4,7 @@ import { uniqBy } from "lodash"
 import { Promise } from "bluebird"
 
 import withSession from "../../lib/session"
-import { getCurrentExpiryTradingSymbol } from "../../lib/utils"
-import { syncGetKiteInstance } from "../../lib/kiteUtils"
+import { syncGetKiteInstance, getCurrentExpiryTradingSymbol } from "../../lib/kiteUtils"
 import advancedFormat from "dayjs/plugin/advancedFormat"
 dayjs.extend(advancedFormat)
 

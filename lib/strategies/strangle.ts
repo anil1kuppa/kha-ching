@@ -11,19 +11,21 @@ import {
   VOLATILITY_TYPE,
 } from "../constants"
 import { doSquareOffPositions } from "../exit-strategies/autoSquareOff"
-import { syncGetKiteInstance } from "../kiteUtils"
+import {
+  syncGetKiteInstance,
+  getExpiryTradingSymbol,
+  getIndexInstruments,
+  ensureMarginForBasketOrder,
+  getHedgeForStrike,
+  getOTMStrangleByOptionPrice,
+  remoteOrderSuccessEnsurer,
+  type TradingSymbolInterface,
+} from "../kiteUtils"
 import logger from "../logger"
 import { EXIT_TRADING_Q_NAME } from "../queue"
 import {
   attemptBrokerOrders,
-  ensureMarginForBasketOrder,
-  getExpiryTradingSymbol,
-  getHedgeForStrike,
-  getIndexInstruments,
-  getOTMStrangleByOptionPrice,
   isMarketOpen,
-  remoteOrderSuccessEnsurer,
-  type TradingSymbolInterface,
   withRemoteRetry,
 } from "../utils"
 import { createOrder, getATMStraddle as getATMStrikes } from "./atmStraddle"

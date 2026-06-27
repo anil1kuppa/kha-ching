@@ -12,7 +12,6 @@ import { logDeep, storeAccessTokenRemotely } from "../../lib/utils"
 import { getIndexInstruments } from "../../lib/kiteUtils"
 import { storeAccessToken, checksameToken } from "../../lib/drizzleDbUtils"
 import { SignalXUser } from "../../types/misc"
-//import {ANCILLARY_TASKS} from '../../lib/constants'
 import logger from "../../lib/logger"
 
 const apiKey = process.env.KITE_API_KEY!

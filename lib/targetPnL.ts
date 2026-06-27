@@ -6,11 +6,9 @@ import type { ATM_STRADDLE_TRADE, ATM_STRANGLE_TRADE, SUPPORTED_TRADE_CONFIG } f
 type StraddleOrStrangleTrade = ATM_STRADDLE_TRADE | ATM_STRANGLE_TRADE
 import { type COMPLETED_BY_TAG, JOB_EXECUTION_STATUS, USER_OVERRIDE } from "./constants"
 import autoSquareOffStrat, { squareOffTag } from "./exit-strategies/autoSquareOff"
-import { syncGetKiteInstance } from "./kiteUtils"
+import { syncGetKiteInstance, getInstrumentPrice, getCompletedOrdersbyTag } from "./kiteUtils"
 import logger from "./logger"
 import {
-  getCompletedOrdersbyTag,
-  getInstrumentPrice,
   getTimeLeftInMarketClosingMs,
   getValuesfromDB,
   isTimeAfterAutoSquareOff,
