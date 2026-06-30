@@ -4,6 +4,7 @@ import { SL_ORDER_TYPE } from "../../types/plans"
 import type { ATM_STRADDLE_TRADE, ATM_STRANGLE_TRADE, SUPPORTED_TRADE_CONFIG } from "../../types/trade"
 
 type StraddleOrStrangleTrade = ATM_STRADDLE_TRADE | ATM_STRANGLE_TRADE
+import { STATUS_TRIGGER_PENDING } from "../constants"
 import { syncGetKiteInstance } from "../kiteUtils"
 import logger from "../logger"
 import { addToNextQueue, TARGETPNL_Q_NAME } from "../queue"
@@ -122,7 +123,7 @@ async function individualLegExitOrders({
   const exitOrderPrs = exitOrders.map(async order =>
     remoteOrderSuccessEnsurer({
       _kite: kite,
-      ensureOrderState: "TRIGGER PENDING",
+      ensureOrderState: STATUS_TRIGGER_PENDING,
       orderProps: order,
       instrument,
       user: user!,

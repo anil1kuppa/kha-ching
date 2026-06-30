@@ -5,7 +5,7 @@ import type {
   ATM_STRANGLE_TRADE,
   SUPPORTED_TRADE_CONFIG,
 } from "../../types/trade"
-import { USER_OVERRIDE } from "../constants"
+import { USER_OVERRIDE, STATUS_TRIGGER_PENDING } from "../constants"
 import { db } from "../drizzle"
 import { type PlaceOrderParams, placeOrder, syncGetKiteInstance, getCompletedOrdersbyTag, remoteOrderSuccessEnsurer } from "../kiteUtils"
 import logger from "../logger"
@@ -17,7 +17,7 @@ import {
 
 export async function doDeletePendingOrders(orders: KiteOrder[], kite: any) {
   const allOrders: KiteOrder[] = await withRemoteRetry(() => kite.getOrders())
-  const openOrders: KiteOrder[] = allOrders.filter(order => order.status === "TRIGGER PENDING")
+  const openOrders: KiteOrder[] = allOrders.filter(order => order.status === STATUS_TRIGGER_PENDING)
 
   const openOrdersForPositions = orders
     .map(order =>
@@ -177,7 +177,7 @@ export async function squareOffTag(orderTag: string, kite: any): Promise<any> {
   for (const summary of orderSummarybyTag) {
     for (const openOrder of allOrders.filter(
       order =>
-        order.status === "TRIGGER PENDING" &&
+        order.status === STATUS_TRIGGER_PENDING &&
         order.tag === orderTag &&
         order.tradingsymbol === summary.tradingsymbol
     )) {
@@ -219,7 +219,7 @@ export async function cancelCoOrders(user): Promise<any> {
   const kite = syncGetKiteInstance(user)
   const allOrders: KiteOrder[] = await withRemoteRetry(() => kite.getOrders())
   const openOrders: KiteOrder[] = allOrders.filter(
-    order => order.status === "TRIGGER PENDING" && order.variety === kite.VARIETY_CO
+    order => order.status === STATUS_TRIGGER_PENDING && order.variety === kite.VARIETY_CO
   )
   await Promise.all(
     openOrders

@@ -1,6 +1,6 @@
 import { Worker, Job } from "bullmq"
 import dayjs from "dayjs"
-import type { HistoricalData } from "kiteconnect"
+import type { HistoricalData, Order } from "kiteconnect"
 import logger from "../logger"
 import { CHASE_Q_NAME, redisConnection } from "../queue"
 import { ms, toIst, postToSlack } from "../utils"
@@ -22,7 +22,7 @@ import {
   insertChaseLog,
   getSubscribeChaseJob,
 } from "../drizzleDbUtils"
-import { CHASE_STATUS } from "../constants"
+import { CHASE_STATUS, STATUS_TRIGGER_PENDING } from "../constants"
 import { generateSignal, getAcceptedPrevEma } from "../chaseSignal"
 
 const OPEN_MINUTES = 9 * 60 + 16   // 9:16 AM IST
@@ -368,7 +368,19 @@ async function processUpdateSL(job: Job) {
         const newQuantity = lots * newLotSize
         const exitSide = currentStatus === CHASE_STATUS.LONG ? "SELL" : "BUY"
         const entrySide = currentStatus === CHASE_STATUS.LONG ? "BUY" : "SELL"
-        await placeKiteOrder(accessToken, { tradingsymbol, exchange: "NFO", transaction_type: exitSide, quantity, order_type: "MARKET", product: "NRML", tag: "chase" } as any)
+        const allOrders = (await kite.getOrders()) as Order[]
+        const existingSLOrder = allOrders.find(
+          o =>
+            o.tradingsymbol === tradingsymbol &&
+            o.transaction_type === exitSide &&
+            o.status === STATUS_TRIGGER_PENDING
+        )
+        if (existingSLOrder) {
+          await kite.modifyOrder("regular", existingSLOrder.order_id, { order_type: "MARKET", market_protection: 2 } as any)
+          logger.info(`[processUpdateSL] Converted SL order ${existingSLOrder.order_id} to MARKET for ${tradingsymbol} rollover`)
+        } else {
+          await placeKiteOrder(accessToken, { tradingsymbol, exchange: "NFO", transaction_type: exitSide, quantity, order_type: "MARKET", product: "NRML", tag: "chase" } as any)
+        }
         await placeKiteOrder(accessToken, { tradingsymbol: nextInstrument.tradingsymbol, exchange: "NFO", transaction_type: entrySide, quantity: newQuantity, order_type: "MARKET", product: "NRML", tag: "chase" } as any)
         await placeSL(nextInstrument.tradingsymbol, exitSide, newQuantity, accessToken, newStoploss)
       }

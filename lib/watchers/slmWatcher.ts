@@ -22,6 +22,7 @@
 import type { KiteOrder } from "../../types/kite"
 import type { SignalXUser } from "../../types/misc"
 import type { ATM_STRADDLE_TRADE, ATM_STRANGLE_TRADE, SUPPORTED_TRADE_CONFIG } from "../../types/trade"
+import { STATUS_TRIGGER_PENDING } from "../constants"
 import { syncGetKiteInstance } from "../kiteUtils"
 import logger from "../logger"
 import { addToNextQueue } from "../queue"
@@ -164,7 +165,7 @@ const slmWatcher = async ({
     logger.info("[slmWatcher] placing exit order", exitOrder)
     try {
       const { response } = await remoteOrderSuccessEnsurer({
-        ensureOrderState: exitOrder.trigger_price ? "TRIGGER PENDING" : kite.STATUS_COMPLETE,
+        ensureOrderState: exitOrder.trigger_price ? STATUS_TRIGGER_PENDING : kite.STATUS_COMPLETE,
         orderProps: exitOrder,
         instrument: (_queueJobData.initialJobData as ATM_STRADDLE_TRADE | ATM_STRANGLE_TRADE).instrument,
         user,
