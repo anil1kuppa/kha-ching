@@ -21,7 +21,7 @@ import { Promise } from "bluebird"
 import { eq } from "drizzle-orm"
 import logger from "./logger"
 import type { COMPLETED_BY_TAG } from "./constants"
-import { EXPIRY_TYPE, INSTRUMENT_DETAILS, USER_OVERRIDE, type INSTRUMENTS } from "./constants"
+import { EXPIRY_TYPE, INSTRUMENT_DETAILS, USER_OVERRIDE, STATUS_TRIGGER_PENDING, type INSTRUMENTS } from "./constants"
 import { db } from "./drizzle"
 import { allSettled } from "./es6-promise"
 import { jobExecutions } from "./schema"
@@ -1213,7 +1213,7 @@ export async function cancelOrder(
     o =>
       o.tradingsymbol === tradingsymbol &&
       o.transaction_type === transactionType &&
-      o.status === "TRIGGER PENDING"
+      o.status === STATUS_TRIGGER_PENDING
   )
   if (!orderToCancel) {
     logger.warn(
@@ -1271,7 +1271,7 @@ export async function placeSL(
     o =>
       o.tradingsymbol === tradingsymbol &&
       o.transaction_type === transactionType &&
-      o.status === "TRIGGER PENDING"
+      o.status === STATUS_TRIGGER_PENDING
   )
 
   if (existingSL) {
