@@ -141,7 +141,7 @@ async function processUpdateSL(job: Job) {
 
   if (!currentStatus || !tradingsymbol || !instrumentToken) {
     logger.info("[processUpdateSL] no active chase position")
-    return null
+    return "No active chase position";
   }
 
   const { user } = job.data as any
@@ -313,13 +313,14 @@ async function processUpdateSL(job: Job) {
 
     return { stoploss: newStoploss }
   }
+  const currentExpiry = dayjs(activeInstrumentData.expiry)?.startOf("day")
+  const currentExpiryToday = currentExpiry.isSame(now.startOf("day"), "day")
 
   // Rollover: switch to next month's contract
   if (
     (currentStatus === CHASE_STATUS.LONG || currentStatus === CHASE_STATUS.SHORT) &&
     currentMinutes === ROLLOVER_MINUTES &&
-    futuresInstruments.length === 2 &&
-    futuresInstruments[0].tradingsymbol === tradingsymbol
+    currentExpiryToday
   ) {
     const nextInstrument = futuresInstruments[1]
     const prevRow = await getLatestEma(nextInstrument.tradingsymbol)
@@ -329,6 +330,7 @@ async function processUpdateSL(job: Job) {
       return null
     }
     const newStoploss = emaResult.ema
+    logger.info(`[processUpdateSL] Rollover to ${nextInstrument.tradingsymbol} with new SL ${newStoploss}`)
     await postToSlack(
       `:repeat: Action $chase: Transaction Alert, Rollover to :arrow_right: ${nextInstrument.tradingsymbol}, Chase is now *${currentStatus}* with stoploss: *${newStoploss}* :shield:`
     )
