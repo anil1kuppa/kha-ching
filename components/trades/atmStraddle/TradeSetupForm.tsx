@@ -250,17 +250,32 @@ const TradeSetupForm = ({
                   }
                 />
                 {state.isMaxProfitEnabled ? (
-                  <TextField
-                    fullWidth
-                    name="maxProfitPoints"
-                    value={state.trailingMaxProfitPoints}
-                    onChange={e =>
-                      onChange({
-                        trailingMaxProfitPoints: +e.target.value || undefined,
-                      })
-                    }
-                    label="Max Profit in points"
-                  />
+                  <>
+                    <TextField
+                      fullWidth
+                      name="maxProfitPoints"
+                      value={state.trailingMaxProfitPoints}
+                      onChange={e =>
+                        onChange({
+                          trailingMaxProfitPoints: +e.target.value || undefined,
+                        })
+                      }
+                      label="Max Profit in points"
+                    />
+                    <TextField
+                      fullWidth
+                      name="trailingProfitPercent"
+                      value={state.trailingProfitPercent}
+                      onChange={e =>
+                        onChange({
+                          trailingProfitPercent: +e.target.value || undefined,
+                        })
+                      }
+                      label="Profit trail-up %"
+                      helperText="On breach, target is raised by this % (e.g. 10 = 10% higher)"
+                      sx={{ mt: 2 }}
+                    />
+                  </>
                 ) : null}
               </FormGroup>
             </FormControl>

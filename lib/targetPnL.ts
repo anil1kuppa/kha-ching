@@ -5,15 +5,14 @@ import type { ATM_STRADDLE_TRADE, ATM_STRANGLE_TRADE, SUPPORTED_TRADE_CONFIG } f
 
 type StraddleOrStrangleTrade = ATM_STRADDLE_TRADE | ATM_STRANGLE_TRADE
 import { type COMPLETED_BY_TAG, JOB_EXECUTION_STATUS, USER_OVERRIDE } from "./constants"
+import { getValuesfromDB, patchDbTrade } from "./drizzleDbUtils"
 import autoSquareOffStrat, { squareOffTag } from "./exit-strategies/autoSquareOff"
 import { syncGetKiteInstance, getInstrumentPrice, getCompletedOrdersbyTag } from "./kiteUtils"
 import logger from "./logger"
 import {
   getTimeLeftInMarketClosingMs,
-  getValuesfromDB,
   isTimeAfterAutoSquareOff,
   // logDeep,
-  patchDbTrade,
   round,
   withRemoteRetry,
 } from "./utils"
@@ -32,6 +31,7 @@ const targetPnL = async ({
     orderTag,
     isMaxProfitEnabled,
     isAutoSquareOffEnabled,
+    trailingProfitPercent,
     autoSquareOffProps: { time } = {},
   } = initialJobData as StraddleOrStrangleTrade
 
@@ -66,12 +66,6 @@ const targetPnL = async ({
   let dbData: any = null
   try {
     dbData = await getValuesfromDB(initialJobData.id!)
-
-    // if (!(dbData?.trailingMaxProfitPoints))
-    //  {
-    //     dbData.trailingMaxProfitPoints=maxProfitPoints
-    //     dbData.trailingMaxLossPoints=-1*maxLossPoints!
-    //  }
     dbData.lastTargetAt = dayjs().toDate()
     dbData.currentPoints = totalPoints.points
     logger.info(`[targetPnL] Current points for ${orderTag}: ${dbData.currentPoints}`)
@@ -80,31 +74,23 @@ const targetPnL = async ({
   }
   if (totalPoints.areAllOrdersCompleted) {
     logger.info(`[targetPnL] ${orderTag} all orders are completed — setting SQUARED_OFF`)
-    await patchDbTrade({
-      id: initialJobData.id!,
-      patchProps: {
-        status: JOB_EXECUTION_STATUS.SQUARED_OFF,
-        lastTargetAt: dbData?.lastTargetAt,
-        currentPoints: String(dbData?.currentPoints ?? totalPoints.points),
-      },
+    await patchDbTrade(initialJobData.id!, {
+      status: JOB_EXECUTION_STATUS.SQUARED_OFF,
+      lastTargetAt: dbData?.lastTargetAt,
+      currentPoints: String(dbData?.currentPoints ?? totalPoints.points),
     })
     return Promise.resolve("[targetPnL] all orders are completed")
   } else if (isMaxProfitEnabled && totalPoints.points > dbData.trailingMaxProfitPoints!) {
-    /*
-1. Update the db with the trailingMaxLossPoints,trailingMaxProfitPoints
-2. 
 
-*/
-
-    const newTrailingMaxProfitPoints = round(1.1 * dbData.trailingMaxProfitPoints!)
-    await patchDbTrade({
-      id: initialJobData.id!,
-      patchProps: {
-        lastTargetAt: dbData.lastTargetAt,
-        currentPoints: String(dbData.currentPoints),
-        trailingMaxLossPoints: String(dbData.trailingMaxProfitPoints),
-        trailingMaxProfitPoints: String(newTrailingMaxProfitPoints),
-      },
+    const trailingProfitMultiplier = 1 + (trailingProfitPercent || 10) / 100
+    const newTrailingMaxProfitPoints = round(
+      trailingProfitMultiplier * dbData.trailingMaxProfitPoints!,0.1
+    )
+    await patchDbTrade(initialJobData.id!, {
+      lastTargetAt: dbData.lastTargetAt,
+      currentPoints: String(dbData.currentPoints),
+      trailingMaxLossPoints: String(dbData.trailingMaxProfitPoints),
+      trailingMaxProfitPoints: String(newTrailingMaxProfitPoints),
     })
     dbData.trailingMaxLossPoints = dbData.trailingMaxProfitPoints
     dbData.trailingMaxProfitPoints = newTrailingMaxProfitPoints
@@ -124,12 +110,9 @@ const targetPnL = async ({
     //Square off the tag
   } else if (isMaxLossEnabled && totalPoints.points < dbData.trailingMaxLossPoints!) {
     logger.info(`[targetPnL]squaring Off as loss is breached ${dbData.trailingMaxLossPoints}`)
-    await patchDbTrade({
-      id: initialJobData.id!,
-      patchProps: {
-        lastTargetAt: dbData.lastTargetAt,
-        currentPoints: String(dbData.currentPoints),
-      },
+    await patchDbTrade(initialJobData.id!, {
+      lastTargetAt: dbData.lastTargetAt,
+      currentPoints: String(dbData.currentPoints),
     })
     try {
       await squareOffTag(orderTag!, kite)
@@ -139,12 +122,9 @@ const targetPnL = async ({
     return Promise.resolve("[targetPnL] orders are squared off as loss has been breached")
     //Square off the tag
   } else {
-    await patchDbTrade({
-      id: initialJobData.id!,
-      patchProps: {
-        lastTargetAt: dbData.lastTargetAt,
-        currentPoints: String(dbData.currentPoints),
-      },
+    await patchDbTrade(initialJobData.id!, {
+      lastTargetAt: dbData.lastTargetAt,
+      currentPoints: String(dbData.currentPoints),
     })
     const rejectMsg = `🟢[targetPnL] retry for tag: ${orderTag} Points: ${totalPoints.points} `
     return Promise.reject(new Error(rejectMsg))

@@ -171,6 +171,7 @@ export const STRATEGIES_DETAILS = {
       trailingMaxLossPoints: -18,
       isMaxProfitEnabled: true,
       trailingMaxProfitPoints: 12,
+      trailingProfitPercent: 10,
       maxLossPoints: 20,
       maxProfitPoints: 20,
       expireIfUnsuccessfulInMins: 10,

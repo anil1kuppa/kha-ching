@@ -22,6 +22,7 @@ export interface SavedPlanMeta extends COMMON_TRADE_PROPS {
   trailingMaxLossPoints?: number
   isMaxProfitEnabled: boolean
   trailingMaxProfitPoints?: number
+  trailingProfitPercent?: number
   runNow?: boolean
   autoSquareOffProps?: { time: string; deletePendingOrders: boolean }
   runAt?: string

@@ -7,13 +7,11 @@ import type {
 } from "../../types/trade"
 import { USER_OVERRIDE, STATUS_TRIGGER_PENDING } from "../constants"
 import { db } from "../drizzle"
+import { patchDbTrade } from "../drizzleDbUtils"
 import { type PlaceOrderParams, placeOrder, syncGetKiteInstance, getCompletedOrdersbyTag, remoteOrderSuccessEnsurer } from "../kiteUtils"
 import logger from "../logger"
 import { jobExecutions } from "../schema"
-import {
-  patchDbTrade,
-  withRemoteRetry,
-} from "../utils"
+import { withRemoteRetry } from "../utils"
 
 export async function doDeletePendingOrders(orders: KiteOrder[], kite: any) {
   const allOrders: KiteOrder[] = await withRemoteRetry(() => kite.getOrders())
@@ -101,11 +99,8 @@ export async function doSquareOffPositions(
 
   if ((initialJobData as ATM_STRANGLE_TRADE | ATM_STRADDLE_TRADE).onSquareOffSetAborted) {
     try {
-      await patchDbTrade({
-        id: initialJobData.id!,
-        patchProps: {
-          userOverride: USER_OVERRIDE.ABORT,
-        },
+      await patchDbTrade(initialJobData.id!, {
+        userOverride: USER_OVERRIDE.ABORT,
       })
     } catch (error) {
       logger.error("error in onSquareOffSetAborted", error)

@@ -139,7 +139,7 @@ async function processUpdateSL(job: Job) {
   const { status: currentStatus, tradingsymbol, stoploss, entryPoint, instrumentToken, createdAt } =
     chaseStatusData
 
-  if (!currentStatus || !tradingsymbol || !instrumentToken) {
+  if (!currentStatus || !tradingsymbol || !instrumentToken||currentStatus === CHASE_STATUS.AWAITING_SIGNAL) {
     logger.info("[processUpdateSL] no active chase position")
     return "No active chase position";
   }

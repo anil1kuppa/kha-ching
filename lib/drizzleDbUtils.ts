@@ -8,8 +8,7 @@ export async function storeAccessToken(access_token: string): Promise<void> {
 await db.execute(
   sql`SELECT cleanup_old_records()`
 );
-    await db.insert(accesstoken).values({ accessToken: access_token })
-    logger.info("[storeAccessToken] Successfully stored access token:", access_token)
+    await db.insert(accesstoken).values({ accessToken: access_token });
   } catch (error) {
     logger.error("[storeAccessToken] error:", error)
   }
@@ -119,6 +118,14 @@ export async function insertMultipleTransactions(
     logger.error("[insertMultipleTransactions] Error during batch insert:", error)
     throw error
   }
+}
+
+/**
+ * Fetch job execution values from DB by id.
+ */
+export async function getValuesfromDB(id: string): Promise<Record<string, unknown> | null> {
+  const rows = await db.select().from(jobExecutions).where(eq(jobExecutions.id, id))
+  return rows[0] ?? null
 }
 
 export async function patchDbTrade(

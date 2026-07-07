@@ -1,5 +1,6 @@
 const express = require("express")
 const next = require("next")
+const { ironSession } = require("next-iron-session")
 const { createBullBoard } = require("@bull-board/api")
 const { BullMQAdapter } = require("@bull-board/api/bullMQAdapter")
 const { ExpressAdapter } = require("@bull-board/express")
@@ -11,6 +12,24 @@ const PORT = parseInt(process.env.PORT || "3000", 10)
 
 const app = next({ dev })
 const handle = app.getRequestHandler()
+
+// NB: must match lib/session.ts (cookieName/password). Kept in sync manually because
+// server.js runs as plain Node (no TS transform) and can't import that file directly.
+const sessionMiddleware = ironSession({
+  password: process.env.SECRET_COOKIE_PASSWORD,
+  cookieName: "khaching/kite/session",
+  cookieOptions: {
+    secure: process.env.NODE_ENV === "production",
+  },
+})
+
+function requireLoggedInUser(req, res, next) {
+  const user = req.session.get("user")
+  if (!user) {
+    return res.status(401).send("Unauthorized")
+  }
+  return next()
+}
 
 async function setupBullBoard(server) {
   const redisUrl = process.env.REDIS_URL
@@ -45,7 +64,7 @@ async function setupBullBoard(server) {
     serverAdapter,
   })
 
-  server.use("/queues", serverAdapter.getRouter())
+  server.use("/queues", sessionMiddleware, requireLoggedInUser, serverAdapter.getRouter())
   console.log(`[bull-board] Mounted at http://localhost:${PORT}/queues`)
 }
 

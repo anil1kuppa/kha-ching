@@ -2,23 +2,15 @@ import axios from "axios"
 import type Bluebird from "bluebird"
 import { any, Promise } from "bluebird"
 import dayjs, { type Dayjs } from "dayjs"
-import { eq } from "drizzle-orm"
 import type { KiteOrder } from "../types/kite"
 import {
   ERROR_STRINGS,
   EXIT_STRATEGIES,
   TRADES,
 } from "./constants"
-import { db } from "./drizzle"
-// This function has been moved to Drizzle-backed utilities to use the job_executions table
-import {
-  getLatestAccessToken,
-  patchDbTrade as patchDbTradeFromDb,
-  storeAccessToken,
-} from "./drizzleDbUtils"
+import { getLatestAccessToken, storeAccessToken } from "./drizzleDbUtils"
 import { allSettled, type allSettledInterface } from "./es6-promise"
 import logger from "./logger"
-import { jobExecutions } from "./schema"
 import { COMPLETED_ORDER_RESPONSE } from "./strategies/mockData/orderResponse"
 
 Promise.config({ cancellation: true, warnings: true })
@@ -628,29 +620,6 @@ export const orderStateChecker = (kite, orderId, ensureOrderState) => {
     })
   })
 }
-
-// gets the current data from DB
-/**
- * Fetch job execution values from DB by id.
- */
-export const getValuesfromDB = async (id: string): Promise<Record<string, unknown> | null> => {
-  const rows = await db.select().from(jobExecutions).where(eq(jobExecutions.id, id))
-  return rows[0] ?? null
-}
-
-/**
- * Patch a DB trade row using drizzle-backed helper.
- */
-export const patchDbTrade = async ({
-  id,
-  patchProps,
-}: {
-  id: string
-  patchProps: Parameters<typeof patchDbTradeFromDb>[1]
-}): Promise<Record<string, unknown>> => {
-  return patchDbTradeFromDb(id, patchProps)
-}
-
 
 /**
  * Attempt multiple broker orders in parallel and return aggregated success state.

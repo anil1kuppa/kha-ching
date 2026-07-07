@@ -2,6 +2,12 @@
 
 SignalX is a trading app for anyone looking to diversify their funds into systematic and algorithmic intraday trading strategies.
 
+## Available Trades
+
+- **ATM Straddle** — Simultaneously sells/buys the at-the-money CE and PE. Supports a skew check (see `NEXT_PUBLIC_DEFAULT_SKEW_PERCENT` below) so both legs are entered near their fair premium, plus configurable SL and target exit strategies per leg or combined.
+- **ATM Strangle** — Same idea as the straddle but with CE and PE legs offset from the ATM strike, for a wider breakeven range.
+- **Subscribe & Chase** — A trending 40-EMA strategy, available for Nifty futures only. Recomputes the 40-period EMA on hourly candles and trails the stop-loss as price moves in the trend's favor, converting to a market order on rollover. Entry, exit, and SL-update signals are posted to Slack.
+
 ## Prerequisites
 
 1. **Kite Connect** — Go to https://kite.trade and sign up. Create an app and pay Zerodha the ₹500/month fee.
@@ -84,14 +90,16 @@ The app runs on port `3000` by default. Use a reverse proxy (nginx, Caddy) to ex
 
 ## Running with Docker Compose
 
-If you prefer running everything via Docker (app + Postgres + Redis + OTEL Collector):
+`docker-compose.yml` only builds and runs the app container — it does not provision Postgres or Redis. Before running `docker compose up`, make sure Docker, PostgreSQL, and Redis are all installed and PostgreSQL/Redis are reachable (either running on the host, or as separate containers), then point `DATABASE_URL` and `REDIS_URL` in `.env` at them:
 
 ```bash
-cp .env.example .env   # fill in your values
-COMPOSE_PROFILES=local docker compose up
+cp .env.example .env   # fill in your values, including DATABASE_URL and REDIS_URL
+docker compose up app          # production build
+# or
+docker compose up app-dev      # dev build with hot reload
 ```
 
-This spins up `postgres:16-alpine`, `redis:7-alpine`, an OTEL Collector, and the app. The app health-check endpoint is `GET /api/health`.
+The app health-check endpoint is `GET /api/health`.
 
 ---
 

@@ -1,4 +1,5 @@
 import dayjs from "dayjs"
+import type { Order } from "kiteconnect"
 import logger from "./logger"
 import { toIst, postToSlack } from "./utils"
 import { getPreviousTradingDay, placeKiteOrder, getKiteInstance } from "./kiteUtils"
@@ -7,7 +8,7 @@ import {
   updateChaseStatus,
   getSubscribeChaseJob,
 } from "./drizzleDbUtils"
-import { CHASE_STATUS } from "./constants"
+import { CHASE_STATUS, STATUS_TRIGGER_PENDING } from "./constants"
 
 export type ChaseInstrument = {
   tradingsymbol: string
@@ -160,6 +161,29 @@ export const generateSignal = async (
     const { success, error } = await updateChaseStatus({ stoploss, updatedAt: new Date() })
     if (!success) {
       logger.error("[generateSignal] error updating chase_status:", error)
+    } else {
+      const exitSide = currentStatus === CHASE_STATUS.LONG ? "SELL" : "BUY"
+      const kite = getKiteInstance(accessToken)
+      const allOrders = (await kite.getOrders()) as Order[]
+      const existingSLOrder = allOrders.find(
+        o =>
+          o.tradingsymbol === instrument.tradingsymbol &&
+          o.transaction_type === exitSide &&
+          o.status === STATUS_TRIGGER_PENDING
+      )
+      if (existingSLOrder) {
+        await kite.modifyOrder("regular", existingSLOrder.order_id, {
+          trigger_price: stoploss,
+          price: exitSide === "SELL" ? stoploss - 5 : stoploss + 5,
+        } as any)
+        logger.info(
+          `[generateSignal] modified SL order ${existingSLOrder.order_id} to ${stoploss} for ${instrument.tradingsymbol}`
+        )
+      } else {
+        logger.info(
+          `[generateSignal] no pending SL order found for ${instrument.tradingsymbol} — skipping order modification`
+        )
+      }
     }
   } else if (currentStatus === CHASE_STATUS.AWAITING_SIGNAL) {
     const longTolerance = instrument.ema ? 1.002 * instrument.ema : 0

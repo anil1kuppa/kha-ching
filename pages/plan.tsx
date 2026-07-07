@@ -22,6 +22,7 @@ import ATMStraddleTradeForm from "../components/trades/atmStraddle/TradeSetupFor
 import ATMStrangleTradeForm from "../components/trades/atmStrangle/TradeSetupForm"
 import { getSchedulingStateProps } from "../lib/browserUtils"
 import { EXPIRY_TYPE, INSTRUMENTS, INSTRUMENT_DETAILS, PRODUCT_TYPE, STRATEGIES, STRATEGIES_DETAILS } from "../lib/constants"
+import useUser from "../lib/useUser"
 import { DailyPlansConfig, DailyPlansDayKey } from "../types/misc"
 import { ATM_STRADDLE_CONFIG, ATM_STRANGLE_CONFIG, AvailablePlansConfig } from "../types/plans"
 
@@ -52,6 +53,8 @@ const resetDefaultStratState = (): Record<STRATEGIES, AvailablePlansConfig> => {
 }
 
 const Plan = () => {
+  useUser({ redirectTo: "/" })
+
   const [dayState, setDayState] = useState<DailyPlansConfig>({
     monday: {
       heading: "Monday",

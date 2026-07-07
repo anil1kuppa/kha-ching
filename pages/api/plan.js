@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm"
 import { db } from "../../lib/drizzle"
 import { tradePlans } from "../../lib/schema"
 import logger from "../../lib/logger"
+import withSession from "../../lib/session"
 
 const DB_PLAN_COLUMNS = new Set([
   "name",
@@ -22,6 +23,7 @@ const DB_PLAN_COLUMNS = new Set([
   "slLimitPricePercent",
   "maxProfitPoints",
   "isMaxProfitEnabled",
+  "trailingProfitPercent",
   "maxLossPoints",
   "isMaxLossEnabled",
   "thresholdSkewPercent",
@@ -77,7 +79,13 @@ const mapPlanFromDb = row => {
   }
 }
 
-export default async function plan(req, res) {
+export default withSession(async (req, res) => {
+  const user = req.session.get("user")
+
+  if (!user) {
+    return res.status(401).send("Unauthorized")
+  }
+
   const { dayOfWeek, config } = req.body || {}
 
   try {
@@ -130,4 +138,4 @@ export default async function plan(req, res) {
     logger.error("[api/plan] error", e)
     return res.status(500).json({ error: e.message })
   }
-}
+})
