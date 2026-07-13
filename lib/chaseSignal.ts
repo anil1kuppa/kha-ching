@@ -2,7 +2,7 @@ import dayjs from "dayjs"
 import type { Order } from "kiteconnect"
 import logger from "./logger"
 import { toIst, postToSlack } from "./utils"
-import { getPreviousTradingDay, placeKiteOrder, getKiteInstance } from "./kiteUtils"
+import { getPreviousTradingDay, placeKiteOrder, getKiteInstance, cancelOrder } from "./kiteUtils"
 import {
   getChaseStatus,
   updateChaseStatus,
@@ -264,6 +264,7 @@ export const generateSignal = async (
       await postToSlack(
         `:x: Action $chase: Signal Invalid. :no_entry_sign: Chase is now AwaitingSignal :hourglass_flowing_sand:`
       )
+      await cancelOrder(instrument.tradingsymbol, "BUY", accessToken)
       const { success, error } = await updateChaseStatus({
         updatedAt: new Date(),
         createdAt: new Date(),
@@ -296,6 +297,7 @@ export const generateSignal = async (
       await postToSlack(
         `:x: Action $chase: Signal Invalid. :no_entry_sign: Chase is now AwaitingSignal :hourglass_flowing_sand:`
       )
+      await cancelOrder(instrument.tradingsymbol, "SELL", accessToken)
       const { success, error } = await updateChaseStatus({
         updatedAt: new Date(),
         createdAt: new Date(),
