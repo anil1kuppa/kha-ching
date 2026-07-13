@@ -1,69 +1,63 @@
-import { Box, Button, Grid, Link, Paper, Typography } from '@mui/material'
-import { DeleteForever, Stop } from '@mui/icons-material'
-import axios from 'axios'
-import dayjs from 'dayjs'
-import router from 'next/router'
-import React from 'react'
-import useSWR, { mutate } from 'swr'
+import { Box, Button, Grid, Link, Paper, Typography } from "@mui/material"
+import { DeleteForever, Stop } from "@mui/icons-material"
+import axios from "axios"
+import dayjs from "dayjs"
+import router from "next/router"
+import React from "react"
+import useSWR, { mutate } from "swr"
 
-import { STRATEGIES_DETAILS, USER_OVERRIDE } from '../lib/constants'
-import ActionButtonOrLoader from './lib/ActionButtonOrLoader'
-import BrokerOrders from './lib/brokerOrders'
-import PnLComponent from './lib/pnlComponent'
-import TradeDetails from './lib/tradeDetails'
+import { STRATEGIES_DETAILS, USER_OVERRIDE } from "../lib/constants"
+import ActionButtonOrLoader from "./lib/ActionButtonOrLoader"
+import BrokerOrders from "./lib/brokerOrders"
+import PnLComponent from "./lib/pnlComponent"
+import TradeDetails from "./lib/tradeDetails"
 
 const HeadingWithError = ({ heading, error }) => (
   <>
-    <Typography component='p' color='error'>
+    <Typography component="p" color="error">
       {error}
     </Typography>
-    <Typography component='p'>{heading}</Typography>
+    <Typography component="p">{heading}</Typography>
   </>
 )
 
 const WrapperComponent = props => {
-  const jobWasQueued = props.status !== 'REJECT' && props.queue?.id
+  const isChase = props.strategy === "SUBSCRIBE_CHASE"
+  const jobWasQueued = props.status !== "REJECT" && props.queue?.id
   const { data: jobDetails } = useSWR(
-    jobWasQueued ? `/api/get_job?id=${props.queue.id}` : null
+    jobWasQueued && !isChase ? `/api/get_job?id=${props.queue.id}` : null
   )
 
   const { data: jobOrders } = useSWR(
     props.orderTag ? `/api/get_orders?order_tag=${props.orderTag}` : null
   )
 
-  const { data: pnlData } = useSWR(
-    props.orderTag ? `/api/pnl?order_tag=${props.orderTag}` : null
-  )
+  const { data: pnlData } = useSWR(props.orderTag ? `/api/pnl?order_tag=${props.orderTag}` : null)
 
   const strategyDetails = STRATEGIES_DETAILS[props.strategy]
   const Heading = () => {
-    if (!jobWasQueued) {
-      if (typeof props.status_message === 'string') {
-        return (
-          <HeadingWithError
-            error={props.status_message}
-            heading={strategyDetails.heading}
-          />
-        )
-      } else {
-        return (
-          <HeadingWithError
-            error={'Unknown Error'}
-            heading={strategyDetails.heading}
-          />
-        )
-      }
-    } else if (jobWasQueued && jobDetails?.current_state === 'failed') {
+    if (isChase) {
       return (
-        <HeadingWithError
-          error={jobDetails?.job?.failedReason}
-          heading={strategyDetails.heading}
-        />
+        <Typography component="p">
+          Chase · Scheduled
+        </Typography>
+      )
+    }
+
+    if (!jobWasQueued) {
+      if (typeof props.status_message === "string") {
+        return <HeadingWithError error={props.status_message} heading={strategyDetails.heading} />
+      } else {
+        return <HeadingWithError error={"Unknown Error"} heading={strategyDetails.heading} />
+      }
+    } else if (jobWasQueued && jobDetails?.current_state === "failed") {
+      return (
+        <HeadingWithError error={jobDetails?.job?.failedReason} heading={strategyDetails.heading} />
       )
     }
 
     return (
-      <Typography component='p' color=''>
+      <Typography component="p" color="">
         #{props.queue.id} · {props.name}
       </Typography>
     )
@@ -71,55 +65,52 @@ const WrapperComponent = props => {
 
   const handleDeleteTrade = async tradeId => {
     try {
-      await axios.delete('/api/trades_day', {
+      await axios.delete("/api/trades_day", {
         data: {
-        id: tradeId
-        }
+          id: tradeId,
+        },
       })
-      await mutate('/api/trades_day')
+      await mutate("/api/trades_day")
     } catch (e) {
-      console.log('error deleting job', e)
+      console.log("error deleting job", e)
     }
   }
 
-  const userOverrideAborted =
-    props.user_override && props.user_override === USER_OVERRIDE.ABORT
+  const userOverrideAborted = props.user_override && props.user_override === USER_OVERRIDE.ABORT
 
   const handleAbortTrade = async tradeId => {
     try {
-      await axios.put('/api/trades_day', {
+      await axios.put("/api/trades_day", {
         id: tradeId,
-        user_override: USER_OVERRIDE.ABORT
+        user_override: USER_OVERRIDE.ABORT,
       })
-      await mutate('/api/trades_day')
+      await mutate("/api/trades_day")
     } catch (e) {
-      console.log('error stopping job', e)
+      console.log("error stopping job", e)
     }
   }
 
   return (
     <Paper style={{ marginBottom: 24, padding: 16 }}>
       <Box
-        display='flex'
-        justifyContent='space-between'
-        alignItems='center'
+        display="flex"
+        justifyContent="space-between"
+        alignItems="center"
         style={{ marginBottom: 16, minHeight: 36 }}
       >
-        <Typography style={{ marginRight: '8px' }}>
+        <Typography style={{ marginRight: "8px" }}>
           <Heading />
         </Typography>
         <Box>
           {!jobWasQueued ||
-          (jobWasQueued &&
-            ['delayed', 'waiting', 'failed'].includes(
-              jobDetails?.current_state
-            )) ? (
+          isChase ||
+          (jobWasQueued && ["delayed", "waiting", "failed"].includes(jobDetails?.current_state)) ? (
             <Grid item>
               <ActionButtonOrLoader>
                 {({ setLoading }) => (
                   <Button
-                    variant='outlined'
-                    type='button'
+                    variant="outlined"
+                    type="button"
                     onClick={async () => {
                       setLoading(true)
                       await handleDeleteTrade(props.id)
@@ -133,15 +124,14 @@ const WrapperComponent = props => {
               </ActionButtonOrLoader>
             </Grid>
           ) : null}
-          {['active', 'completed'].includes(jobDetails?.current_state) &&
-          !pnlData?.pnl ? (
+          {["active", "completed"].includes(jobDetails?.current_state) && !pnlData?.pnl ? (
             <Grid item>
               <ActionButtonOrLoader>
                 {({ setLoading }) => (
                   <Button
-                    variant='outlined'
-                    color='inherit'
-                    type='button'
+                    variant="outlined"
+                    color="inherit"
+                    type="button"
                     onClick={async () => {
                       setLoading(true)
                       if (!userOverrideAborted) {
@@ -169,58 +159,48 @@ const WrapperComponent = props => {
         </Box>
       </Box>
 
-      <div style={{ marginBottom: 16 }}>
-        {props.detailsComponent(props.strategy, jobDetails)}
-      </div>
+      <div style={{ marginBottom: 16 }}>{props.detailsComponent(props.strategy, jobDetails)}</div>
 
-      {jobWasQueued ? (
+      {jobWasQueued && !isChase ? (
         <div style={{ marginBottom: 8 }}>
-          <Box
-            display='flex'
-            justifyContent='space-between'
-            alignItems='center'
-          >
-            <Typography variant='subtitle2'>
-              Live status —{' '}
-              {jobDetails?.current_state?.toUpperCase() ||
-                jobDetails?.error ||
-                'Loading...'}
+          <Box display="flex" justifyContent="space-between" alignItems="center">
+            <Typography variant="subtitle2">
+              Live status —{" "}
+              {jobDetails?.current_state?.toUpperCase() || jobDetails?.error || "Loading..."}
             </Typography>
             {pnlData?.pnl ? <PnLComponent pnl={pnlData.pnl} /> : null}
           </Box>
         </div>
       ) : null}
 
-      {Array.isArray(jobOrders) && jobOrders.length ? (
-        <BrokerOrders orders={jobOrders} />
-      ) : null}
+      {Array.isArray(jobOrders) && jobOrders.length ? <BrokerOrders orders={jobOrders} /> : null}
     </Paper>
   )
 }
 
 const TradesForDay = () => {
-  const { data: trades, error } = useSWR('/api/trades_day', {
-    refreshInterval: 10000
+  const { data: trades, error } = useSWR("/api/trades_day", {
+    refreshInterval: 10000,
   })
   if (!trades?.length || error) {
     return (
-      <Typography variant=''>
-        You don&apos;t have any trades scheduled today. Run from{' '}
+      <Typography variant="">
+        You don&apos;t have any trades scheduled today. Run from{" "}
         <Link
-          href='/dashboard?tabId=2'
+          href="/dashboard?tabId=2"
           onClick={e => {
             e.preventDefault()
-            router.push('/dashboard?tabId=2')
+            router.push("/dashboard?tabId=2")
           }}
         >
           your trade plan
-        </Link>{' '}
-        or{' '}
+        </Link>{" "}
+        or{" "}
         <Link
-          href='/dashboard?tabId=1'
+          href="/dashboard?tabId=1"
           onClick={e => {
             e.preventDefault()
-            router.push('/dashboard?tabId=1')
+            router.push("/dashboard?tabId=1")
           }}
         >
           create a new trade
@@ -238,22 +218,18 @@ const TradesForDay = () => {
             key={trade.id}
             {...trade}
             detailsComponent={(strategy, jobDetails) => (
-              <TradeDetails
-                strategy={strategy}
-                tradeDetails={trade}
-                jobDetails={jobDetails}
-              />
+              <TradeDetails strategy={strategy} tradeDetails={trade} jobDetails={jobDetails} />
             )}
           />
         ))}
       </div>
 
-      <Box align='center' marginBottom='60px'>
+      <Box align="center" marginBottom="60px">
         <Button
-          variant='contained'
+          variant="contained"
           onClick={async () => {
-            await axios.post('/api/revoke_session')
-            router.push('/')
+            await axios.post("/api/revoke_session")
+            router.push("/")
           }}
         >
           <Stop /> Kill Switch

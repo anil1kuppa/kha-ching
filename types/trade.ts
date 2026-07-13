@@ -1,14 +1,11 @@
-import { ANCILLARY_TASKS } from '../lib/constants'
-import { DBMeta, SignalXUser } from './misc'
-import {
-  ATM_STRADDLE_CONFIG,
-  ATM_STRANGLE_CONFIG,
-  DIRECTIONAL_OPTION_SELLING_CONFIG,
-  OTS_CONFIG
-} from './plans'
+import type { ANCILLARY_TASKS } from "../lib/constants"
+import type { DBMeta, SignalXUser } from "./misc"
+import type { ATM_STRADDLE_CONFIG, ATM_STRANGLE_CONFIG, SUBSCRIBE_CHASE_CONFIG } from "./plans"
 
 export interface TradeMeta extends DBMeta {
   collection?: string
+  day_of_week?: string
+  dayOfWeek?: string
   isAutoSquareOffEnabled: boolean
   runNow?: boolean
   runAt?: string
@@ -24,16 +21,6 @@ export interface TradeMeta extends DBMeta {
 
 export interface ATM_STRADDLE_TRADE extends TradeMeta, ATM_STRADDLE_CONFIG {}
 export interface ATM_STRANGLE_TRADE extends TradeMeta, ATM_STRANGLE_CONFIG {}
-export interface OTS_TRADE extends TradeMeta, OTS_CONFIG {}
-export interface DIRECTIONAL_OPTION_SELLING_TRADE
-  extends TradeMeta,
-    DIRECTIONAL_OPTION_SELLING_CONFIG {}
-// export interface DIRECTIONAL_OPTION_SELLING_TRADE_SERVER extends DIRECTIONAL_OPTION_SELLING_TRADE{
-//   user: SignalXUser
-// }
+export interface SUBSCRIBE_CHASE_TRADE extends TradeMeta, SUBSCRIBE_CHASE_CONFIG {}
 
-export type SUPPORTED_TRADE_CONFIG =
-  | ATM_STRADDLE_TRADE
-  | ATM_STRANGLE_TRADE
-  | DIRECTIONAL_OPTION_SELLING_TRADE
-  |OTS_TRADE
+export type SUPPORTED_TRADE_CONFIG = ATM_STRADDLE_TRADE | ATM_STRANGLE_TRADE | SUBSCRIBE_CHASE_TRADE

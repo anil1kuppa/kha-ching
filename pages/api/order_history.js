@@ -1,11 +1,11 @@
-import withSession from '../../lib/session'
-import { syncGetKiteInstance } from '../../lib/utils'
+import withSession from "../../lib/session"
+import { syncGetKiteInstance } from "../../lib/kiteUtils"
 
 export default withSession(async (req, res) => {
-  const user = req.session.get('user')
+  const user = req.session.get("user")
 
   if (!user) {
-    return res.status(401).send('Unauthorized')
+    return res.status(401).send("Unauthorized")
   }
 
   const kite = syncGetKiteInstance(user)

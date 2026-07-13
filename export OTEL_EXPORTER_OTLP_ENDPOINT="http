@@ -1,0 +1,2 @@
+export OTEL_EXPORTER_OTLP_ENDPOINT="https://otlp-gateway-prod-ap-south-1.grafana.net/otlp"
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic%20MTY2ODkwMDpnbGNfZXlKdklqb2lNVGM0T1RrNE55SXNJbTRpT2lKcmFHRmphR2x1WnlJc0ltc2lPaUpPZDI4eU5rRlBjVE5HTmpneVVEWnlZazlNV2pReWREVWlMQ0p0SWpwN0luSWlPaUp3Y205a0xXRndMWE52ZFhSb0xURWlmWDA9"

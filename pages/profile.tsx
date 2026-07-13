@@ -1,9 +1,9 @@
-import Layout from '../components/Layout'
-import useUser from '../lib/useUser'
-import React from 'react'
+import Layout from "../components/Layout"
+import useUser from "../lib/useUser"
+import React from "react"
 
 const Profile = () => {
-  const { user } = useUser({ redirectTo: '/' })
+  const { user } = useUser({ redirectTo: "/" })
 
   if (!user?.isLoggedIn) {
     return <Layout>loading...</Layout>

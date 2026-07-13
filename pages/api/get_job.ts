@@ -1,11 +1,12 @@
-import { tradingQueue } from '../../lib/queue'
-import withSession from '../../lib/session'
+import { tradingQueue } from "../../lib/queue"
+import withSession from "../../lib/session"
+import logger from "../../lib/logger"
 
 export default withSession(async (req, res) => {
-  const user = req.session.get('user')
+  const user = req.session.get("user")
 
   if (!user) {
-    return res.status(401).send('Unauthorized')
+    return res.status(401).send("Unauthorized")
   }
 
   const { id: jobId } = req.query
@@ -13,19 +14,19 @@ export default withSession(async (req, res) => {
     const jobRes = await tradingQueue.getJob(jobId)
     if (!jobRes) {
       return res.status(200).json({
-        error: 'job not found'
+        error: "job not found",
       })
     }
 
     const jobState = await jobRes.getState()
     res.json({
       job: jobRes,
-      current_state: jobState
+      current_state: jobState,
     })
   } catch (e) {
-    console.log(e)
+    logger.error("get_job error", e)
     res.status(500).json({
-      status: 'something went wrong'
+      status: "something went wrong",
     })
   }
 })

@@ -1,62 +1,66 @@
-import { Typography, Link, Button, Grid, Paper } from '@mui/material'
+import { Typography, Link, Button, Grid, Paper } from "@mui/material"
 
-import axios from 'axios'
-import dayjs from 'dayjs'
-import React, { useEffect, useState } from 'react'
-import useSWR, { mutate } from 'swr'
-import { formatFormDataForApi } from '../lib/browserUtils'
+import axios from "axios"
+import dayjs from "dayjs"
+import React, { useEffect, useState } from "react"
+import useSWR, { mutate } from "swr"
+import { formatFormDataForApi } from "../lib/browserUtils"
 
-import { STRATEGIES_DETAILS } from '../lib/constants'
-import { SUPPORTED_TRADE_CONFIG } from '../types/trade'
-import ActionButtonOrLoader from './lib/ActionButtonOrLoader'
-import TradeDetails from './lib/tradeDetails'
+import { STRATEGIES_DETAILS } from "../lib/constants"
+import { SUPPORTED_TRADE_CONFIG } from "../types/trade"
+import ActionButtonOrLoader from "./lib/ActionButtonOrLoader"
+import TradeDetails from "./lib/tradeDetails"
 
 const PlanDash = () => {
   const [plans, setPlans] = useState({})
-  const { data: tradesDay } = useSWR('/api/trades_day')
-  const dayOfWeekHuman = dayjs().format('dddd')
-  const dayOfWeek = dayOfWeekHuman.toLowerCase()
+  const { data: tradesDay } = useSWR("/api/trades_day")
+  const dayOfWeekHuman = dayjs().format("dddd")
+  const dayOfWeek = dayOfWeekHuman.toUpperCase()
   // const dayOfWeek = 'monday';
 
   useEffect(() => {
-    async function fn () {
-      const { data } = await axios('/api/plan')
+    async function fn() {
+      const { data } = await axios("/api/plan")
       const date = dayjs()
-      const day = date.get('date')
-      const month = date.get('month')
-      const year = date.get('year')
+      const day = date.get("date")
+      const month = date.get("month")
+      const year = date.get("year")
       const dayWiseData = data.reduce((accum, config) => {
         const updatedConfig = { ...config }
+        const dayKey =
+          updatedConfig.day_of_week || updatedConfig.dayOfWeek || updatedConfig.collection
+
         if (updatedConfig.runAt) {
           updatedConfig.runAt = dayjs(updatedConfig.runAt)
-            .set('date', day)
-            .set('month', month)
-            .set('year', year)
-            .set('seconds', 0)
+            .set("date", day)
+            .set("month", month)
+            .set("year", year)
+            .set("seconds", 0)
             .format()
         }
 
         if (updatedConfig.squareOffTime) {
           updatedConfig.squareOffTime = dayjs(updatedConfig.squareOffTime)
-            .set('date', day)
-            .set('month', month)
-            .set('year', year)
-            .set('seconds', 0)
+            .set("date", day)
+            .set("month", month)
+            .set("year", year)
+            .set("seconds", 0)
             .format()
         }
 
-        if (Array.isArray(accum[updatedConfig.collection])) {
+        if (!dayKey) {
+          return accum
+        }
+
+        if (Array.isArray(accum[dayKey])) {
           return {
             ...accum,
-            [updatedConfig.collection]: [
-              ...accum[updatedConfig.collection],
-              updatedConfig
-            ]
+            [dayKey]: [...accum[dayKey], updatedConfig],
           }
         }
         return {
           ...accum,
-          [updatedConfig.collection]: [updatedConfig]
+          [dayKey]: [updatedConfig],
         }
       }, {})
 
@@ -66,47 +70,39 @@ const PlanDash = () => {
     fn()
   }, [])
 
-  async function handleScheduleJob (plan) {
-    const { runAt } = plan
-    const runNow = dayjs().isAfter(dayjs(runAt))
-    await axios.post(
-      '/api/trades_day',
-      formatFormDataForApi({
-        strategy: plan.strategy,
-        data: {
-          ...plan,
-          plan_ref: plan.id,
-          runNow
-        }
-      })
-    )
-    mutate('/api/trades_day')
+  async function handleScheduleJob(plan) {
+    const { id: planId, ...planWithoutId } = plan
+    const runNow = dayjs().isAfter(dayjs(plan.runAt))
+    const payload = formatFormDataForApi({
+      strategy: plan.strategy,
+      data: {
+        ...planWithoutId,
+        runNow,
+      },
+    })
+
+    await axios.post("/api/trades_day", {
+      ...payload,
+      planRef: planId,
+    })
   }
 
   const getPendingTrades = () =>
     plans[dayOfWeek]
-      ?.filter(plan => !tradesDay?.find(trade => trade.plan_ref === plan.id))
+      ?.filter(
+        plan => !tradesDay?.find(trade => trade.planRef === plan.id || trade.plan_ref === plan.id)
+      )
       .filter(plan => STRATEGIES_DETAILS[plan.strategy])
 
-  const getScheduleableTrades = () => {
-    const pendingTrades = getPendingTrades()
-    if (!pendingTrades) {
-      return null
-    }
-
-    return pendingTrades.filter(trade => dayjs().isBefore(dayjs(trade.runAt)))
-  }
-
-  async function handleScheduleEverything () {
-    const pendingTrades = getScheduleableTrades()
-    // this condition will never be reached as we don't show the button in the UI
-    // if there's nothing to schedule
-    // but keeping it just in case
+  async function handleScheduleEverything() {
+    const pendingTrades = getPendingTrades()?.filter((plan: SUPPORTED_TRADE_CONFIG) =>
+      dayjs(plan.runAt).isAfter(dayjs())
+    )
     if (!(Array.isArray(pendingTrades) && pendingTrades.length)) {
       return
     }
     await Promise.all(pendingTrades.map(handleScheduleJob))
-    mutate('/api/trades_day')
+    await mutate("/api/trades_day")
   }
 
   const pendingTrades = getPendingTrades()
@@ -115,31 +111,28 @@ const PlanDash = () => {
     if (plans[dayOfWeek]) {
       return (
         <Typography>
-          You&apos;ve scheduled all trades as per plan. Check &quot;Today&quot;
-          tab for details.
+          You&apos;ve scheduled all trades as per plan. Check &quot;Today&quot; tab for details.
         </Typography>
       )
     }
     return (
       <Typography>
-        You don&apos;t have a plan for {dayOfWeekHuman} yet. Create one{' '}
-        <Link href='/plan'>here</Link>.
+        You don&apos;t have a plan for {dayOfWeekHuman} yet. Create one{" "}
+        <Link href="/plan">here</Link>.
       </Typography>
     )
   }
 
-  const scheduleableTrades = getScheduleableTrades()
-
   return (
     <div>
-      {plans[dayOfWeek] && scheduleableTrades ? (
+      {plans[dayOfWeek] && pendingTrades?.length ? (
         <ActionButtonOrLoader>
           {({ setLoading }) => (
             <Button
               style={{ marginBottom: 18 }}
-              variant='contained'
-              color='primary'
-              type='button'
+              variant="contained"
+              color="primary"
+              type="button"
               onClick={async () => {
                 setLoading(true)
                 await handleScheduleEverything()
@@ -167,15 +160,16 @@ const PlanDash = () => {
                 <ActionButtonOrLoader>
                   {({ setLoading }) => (
                     <Button
-                      variant='contained'
-                      type='button'
+                      variant="contained"
+                      type="button"
                       onClick={async () => {
                         setLoading(true)
                         await handleScheduleJob(plan)
+                        await mutate("/api/trades_day")
                         setLoading(false)
                       }}
                     >
-                      {isPlanScheduleable ? 'Schedule trade' : 'Run now'}
+                      {isPlanScheduleable ? "Schedule trade" : "Run now"}
                     </Button>
                   )}
                 </ActionButtonOrLoader>

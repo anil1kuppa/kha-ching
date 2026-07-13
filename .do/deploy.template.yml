@@ -25,8 +25,6 @@ spec:
       value: "30"
     - key: NEXT_PUBLIC_DEFAULT_SQUARE_OFF_TIME
       value: "15:20"
-    - key: SIGNALX_API_KEY
-      value: "Your SignalX API Key"
     - key: ORCL_HOST_URL
       value: "Your ORCL host key"
     - key: NEXT_PUBLIC_APP_URL

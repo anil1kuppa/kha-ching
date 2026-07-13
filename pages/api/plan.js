@@ -1,49 +1,141 @@
-import axios from 'axios'
+import { eq } from "drizzle-orm"
+import { db } from "../../lib/drizzle"
+import { tradePlans } from "../../lib/schema"
+import logger from "../../lib/logger"
+import withSession from "../../lib/session"
 
-import { withoutFwdSlash,orclsodaUrl } from '../../lib/utils'
+const DB_PLAN_COLUMNS = new Set([
+  "name",
+  "strategy",
+  "instrument",
+  "expiryType",
+  "productType",
+  "dayOfWeek",
+  "exitStrategy",
+  "combinedExitStrategy",
+  "runAt",
+  "squareOffTime",
+  "expiresAt",
+  "expireIfUnsuccessfulInMins",
+  "lots",
+  "slmPercent",
+  "slOrderType",
+  "slLimitPricePercent",
+  "maxProfitPoints",
+  "isMaxProfitEnabled",
+  "trailingProfitPercent",
+  "maxLossPoints",
+  "isMaxLossEnabled",
+  "thresholdSkewPercent",
+  "maxSkewPercent",
+  "takeTradeIrrespectiveSkew",
+  "volatilityType",
+  "trailEveryPercentageChangeValue",
+  "trailingSlPercent",
+  "trailingMaxProfitPoints",
+  "trailingMaxLossPoints",
+  "isAutoSquareOffEnabled",
+  "autoSquareOffTime",
+])
 
-const orclEndpoint=`${orclsodaUrl}/trade_plans`
-export default async function plan (req, res) {
-  const { dayOfWeek, config } = req.body
-  try {
-    if (req.method === 'POST') {
-      
-      //POST for SODA accepts an object and returns an arrray of ids
-      let updatedConfig={...config[0],collection: `${dayOfWeek}`} 
-      const  {data:{items:[{id}]}}=await axios.post(orclEndpoint,updatedConfig);
-      const {data} = await axios.get(`${orclEndpoint}/${id}`)
-      const newdata= {...data,id}
-      return res.json(newdata)
+const TIMESTAMP_COLUMNS = new Set(["runAt", "squareOffTime", "expiresAt", "autoSquareOffTime"])
+
+const toDate = value => {
+  if (!value) return value
+  if (value instanceof Date) return value
+  const d = new Date(value)
+  return isNaN(d.getTime()) ? value : d
+}
+
+const mapPlanToDb = (planConfig = {}, dayOfWeek) => {
+  const normalizedPlan = {
+    ...planConfig,
+    dayOfWeek: dayOfWeek || planConfig.dayOfWeek || planConfig.day_of_week,
+    autoSquareOffTime: planConfig.autoSquareOffProps?.time || planConfig.autoSquareOffTime,
+  }
+
+  return Object.entries(normalizedPlan).reduce((accum, [key, value]) => {
+    if (value === undefined || key === "id" || key === "collection") {
+      return accum
     }
 
-    if (req.method === 'PUT') {
-      await axios[req.method.toLowerCase()](
-        `${orclEndpoint}/${config.id}`,
-        config
-  );
-  const {data:getData} = await axios.get(`${orclEndpoint}/${config.id}`)
-  const data={...getData,id:config.id}
-      return res.json(data)
+    if (DB_PLAN_COLUMNS.has(key)) {
+      accum[key] = TIMESTAMP_COLUMNS.has(key) ? toDate(value) : value
     }
+    return accum
+  }, {})
+}
 
-    if (req.method === 'DELETE') {
-      console.log(`${config.id}`);
-      const { data }=await axios[req.method.toLowerCase()](
-        `${orclEndpoint}/${config.id}`  );
-      return res.json(data)
-    }
-    const {data:{items}}= await axios(
-      `${orclEndpoint}`);
+const mapPlanFromDb = row => {
+  const normalizedRow = Object.fromEntries(
+    Object.entries(row).filter(([key, value]) => value != null && key !== "createdAt" && key !== "updatedAt")
+  )
 
-const settings=items.map(items=>{
-  return ({...items.value,id:items.id})
- });
- return res.json(settings)
-  } catch (e) {
-    console.log('[api/plan] error', e)
-    if (e.isAxiosError) {
-      return res.status(e.response.status).json(e.response.data || {})
-    }
-    return res.status(500).send(e)
+  return {
+    ...normalizedRow,
+    autoSquareOffProps: row.autoSquareOffTime
+      ? { time: row.autoSquareOffTime, deletePendingOrders: true }
+      : undefined,
   }
 }
+
+export default withSession(async (req, res) => {
+  const user = req.session.get("user")
+
+  if (!user) {
+    return res.status(401).send("Unauthorized")
+  }
+
+  const { dayOfWeek, config } = req.body || {}
+
+  try {
+    if (req.method === "POST") {
+      const planConfigs = Array.isArray(config) ? config : [config]
+      const results = []
+
+      for (const planConfig of planConfigs) {
+        const inserted = await db
+          .insert(tradePlans)
+          .values(mapPlanToDb(planConfig, dayOfWeek))
+          .returning()
+
+        if (inserted.length > 0) {
+          results.push(mapPlanFromDb(inserted[0]))
+        }
+      }
+
+      return res.json(results[0] || {})
+    }
+
+    if (req.method === "PUT") {
+      const planId = config?.id || req.body?.id
+      await db
+        .update(tradePlans)
+        .set(mapPlanToDb(config, dayOfWeek))
+        .where(eq(tradePlans.id, planId))
+
+      const result = await db.select().from(tradePlans).where(eq(tradePlans.id, planId))
+
+      if (result.length > 0) {
+        return res.json(mapPlanFromDb(result[0]))
+      }
+
+      return res.status(404).json({ error: "Plan not found" })
+    }
+
+    if (req.method === "DELETE") {
+      await db.delete(tradePlans).where(eq(tradePlans.id, config.id))
+      return res.json({ success: true })
+    }
+
+    const results = await db
+      .select()
+      .from(tradePlans)
+      .orderBy(tradePlans.dayOfWeek, tradePlans.createdAt)
+
+    return res.json(results.map(mapPlanFromDb))
+  } catch (e) {
+    logger.error("[api/plan] error", e)
+    return res.status(500).json({ error: e.message })
+  }
+})

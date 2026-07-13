@@ -1,19 +1,19 @@
-import withSession from '../../lib/session'
-import { getTradingSymbolsByOptionPrice } from '../../lib/utils'
+import withSession from "../../lib/session"
+import { getTradingSymbolsByOptionPrice } from "../../lib/kiteUtils"
 
 export default withSession(async (req, res) => {
-  const user = req.session.get('user')
+  const user = req.session.get("user")
 
   if (!user) {
-    return res.status(401).send('Unauthorized')
+    return res.status(401).send("Unauthorized")
   }
 
   const response = await getTradingSymbolsByOptionPrice({
-    nfoSymbol: 'BANKNIFTY',
+    nfoSymbol: "BANKNIFTY",
     price: 200,
-    instrumentType: 'CE',
+    instrumentType: "CE",
     pivotStrike: 35000,
-    user
+    user,
   })
 
   res.json({ response })

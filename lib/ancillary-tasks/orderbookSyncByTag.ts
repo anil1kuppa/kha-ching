@@ -1,31 +1,18 @@
-import axios from 'axios'
-import { SignalXUser } from '../../types/misc'
+import type { SignalXUser } from "../../types/misc"
 
-import {
-  syncGetKiteInstance,
-  withRemoteRetry
-} from '../utils'
+import { syncGetKiteInstance } from "../kiteUtils"
+import logger from "../logger"
+import { withRemoteRetry } from "../utils"
 
-const ORCL_HOST_URL=process.env.ORCL_HOST_URL!
-
-async function orderbookSyncByTag ({
-  orderTag,
-  user
-}: {
-  orderTag: string
-  user: SignalXUser
-}) {
+async function orderbookSyncByTag({ orderTag, user }: { orderTag: string; user: SignalXUser }) {
   try {
     const kite = syncGetKiteInstance(user)
     const allOrders = await withRemoteRetry(() => kite.getOrders())
     const ordersForTag = allOrders.filter(order => order.tag === orderTag)
-    console.log(`Order tag is ${orderTag}`)
- 
-    const res=await axios.post(
-      `${ORCL_HOST_URL}/rest-v1/trades`,
-      ordersForTag,
-    )
-    return res
+    logger.info(`Order tag is ${orderTag}`)
+
+    // Local PostgreSQL storage of orders can be added here if needed
+    return { success: true, count: ordersForTag.length, orderTag }
   } catch (e) {
     return Promise.reject(e)
   }

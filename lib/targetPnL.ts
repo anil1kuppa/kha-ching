@@ -1,105 +1,100 @@
-import dayjs from 'dayjs'
-import { KiteOrder } from '../types/kite'
-import {  SUPPORTED_TRADE_CONFIG } from '../types/trade'
-import { USER_OVERRIDE,COMPLETED_BY_TAG } from './constants'
-import console from './logging'
+import { Promise } from "bluebird"
+import dayjs from "dayjs"
+import type { KiteOrder } from "../types/kite"
+import type { ATM_STRADDLE_TRADE, ATM_STRANGLE_TRADE, SUPPORTED_TRADE_CONFIG } from "../types/trade"
 
-import { Promise } from 'bluebird'
-import autoSquareOffStrat,{squareOffTag}  from './exit-strategies/autoSquareOff';
+type StraddleOrStrangleTrade = ATM_STRADDLE_TRADE | ATM_STRANGLE_TRADE
+import { type COMPLETED_BY_TAG, JOB_EXECUTION_STATUS, USER_OVERRIDE } from "./constants"
+import { getValuesfromDB, patchDbTrade } from "./drizzleDbUtils"
+import autoSquareOffStrat, { squareOffTag } from "./exit-strategies/autoSquareOff"
+import { syncGetKiteInstance, getInstrumentPrice, getCompletedOrdersbyTag } from "./kiteUtils"
+import logger from "./logger"
 import {
-  // logDeep,
-  patchDbTrade,
-  round,
-  getInstrumentPrice,
-  syncGetKiteInstance,
-  withRemoteRetry,
   getTimeLeftInMarketClosingMs,
   isTimeAfterAutoSquareOff,
-  getCompletedOrdersbyTag,
-  getValuesfromDB,
-  putValuestoDb
-} from './utils'
+  // logDeep,
+  round,
+  withRemoteRetry,
+} from "./utils"
 
 const targetPnL = async ({
   _kite,
   initialJobData,
-    rawKiteOrdersResponse
-  }:{
-    _kite?:any,
-    initialJobData: SUPPORTED_TRADE_CONFIG
-    rawKiteOrdersResponse: KiteOrder []
-  }) :Promise<any> =>
-  {
-    const {isMaxLossEnabled,orderTag,isMaxProfitEnabled,
-    isAutoSquareOffEnabled,autoSquareOffProps:{time}={}} = initialJobData;
+  rawKiteOrdersResponse,
+}: {
+  _kite?: any
+  initialJobData: SUPPORTED_TRADE_CONFIG
+  rawKiteOrdersResponse: KiteOrder[]
+}): Promise<any> => {
+  const {
+    isMaxLossEnabled,
+    orderTag,
+    isMaxProfitEnabled,
+    isAutoSquareOffEnabled,
+    trailingProfitPercent,
+    autoSquareOffProps: { time } = {},
+  } = initialJobData as StraddleOrStrangleTrade
 
-
-    if (getTimeLeftInMarketClosingMs() < 0 ||
-    (isAutoSquareOffEnabled &&
-      isTimeAfterAutoSquareOff(time!))) {
+  if (
+    getTimeLeftInMarketClosingMs() < 0 ||
+    (isAutoSquareOffEnabled && isTimeAfterAutoSquareOff(time!))
+  ) {
     return Promise.resolve(
-      '🟢 [targetPnL] Terminating the targetPnl queue as market closing or after square off time..'
+      "🟢 [targetPnL] Terminating the targetPnl queue as market closing or after square off time.."
     )
   }
   const kite = _kite || syncGetKiteInstance(initialJobData.user)
-  const completedOrders:COMPLETED_BY_TAG[]= await getCompletedOrdersbyTag(orderTag!, kite)
+  const completedOrders: COMPLETED_BY_TAG[] = await getCompletedOrdersbyTag(orderTag!, kite)
 
-  const totalPoints=await completedOrders.reduce(async (prev,current)=>{
-    const currentPosition=await (prev);
-    if (current.quantity==0)
-      currentPosition.points+=current.points;
-    else
-    {
-      const underlyingLTP = await withRemoteRetry(async () =>
-                getInstrumentPrice(kite,current.tradingsymbol, 'NFO'));
-      currentPosition.points+=current.points+ (current.quantity>0?underlyingLTP:-1*underlyingLTP); 
-      currentPosition.areAllOrdersCompleted=false;
-      
-    }
-    return currentPosition;
-  },Promise.resolve({points:0,
-    areAllOrdersCompleted:true
-    }))
-    totalPoints.points=round(totalPoints.points);
-    let dbData:any = null;
+  const totalPoints = await completedOrders.reduce(
+    async (prev, current) => {
+      const currentPosition = await prev
+      if (current.quantity == 0) currentPosition.points += current.points
+      else {
+        const underlyingLTP = await withRemoteRetry(async () =>
+          getInstrumentPrice(kite, current.tradingsymbol, "NFO")
+        )
+        currentPosition.points +=
+          current.points + (current.quantity > 0 ? underlyingLTP : -1 * underlyingLTP)
+        currentPosition.areAllOrdersCompleted = false
+      }
+      return currentPosition
+    },
+    Promise.resolve({ points: 0, areAllOrdersCompleted: true })
+  )
+  totalPoints.points = round(totalPoints.points)
+  let dbData: any = null
   try {
-        dbData=await getValuesfromDB(initialJobData.id!)
-
-    // if (!(dbData?.trailingMaxProfitPoints))
-    //  {
-    //     dbData.trailingMaxProfitPoints=maxProfitPoints
-    //     dbData.trailingMaxLossPoints=-1*maxLossPoints!
-    //  }
-    dbData.lastTargetAt=dayjs().format();
-    dbData.currentPoints=totalPoints.points;
-    console.log(`[targetPnL] Current points for ${orderTag}: ${dbData.currentPoints}`);
-    // await patchDbTrade({
-    //   id: initialJobData.id!,
-    //   patchProps: {
-    //     lastTargetAt: dayjs().format(),
-    //     currentPoints:totalPoints.points
-    //   }
-    // })
+    dbData = await getValuesfromDB(initialJobData.id!)
+    dbData.lastTargetAt = dayjs().toDate()
+    dbData.currentPoints = totalPoints.points
+    logger.info(`[targetPnL] Current points for ${orderTag}: ${dbData.currentPoints}`)
   } catch (error) {
-    console.log('[targetPnL]error in patchDbTrade', error)
+    logger.error("[targetPnL]error in patchDbTrade", error)
   }
-  if (totalPoints.areAllOrdersCompleted)
-        {
-         console.log(`[targetPnL] ${orderTag} all orders are completed`);
-         return Promise.resolve('[targetPnL] all orders are completed')
-        }
-  else if (isMaxProfitEnabled && totalPoints.points>(dbData.trailingMaxProfitPoints!))
- /*
-1. Update the db with the trailingMaxLossPoints,trailingMaxProfitPoints
-2. 
+  if (totalPoints.areAllOrdersCompleted) {
+    logger.info(`[targetPnL] ${orderTag} all orders are completed — setting SQUARED_OFF`)
+    await patchDbTrade(initialJobData.id!, {
+      status: JOB_EXECUTION_STATUS.SQUARED_OFF,
+      lastTargetAt: dbData?.lastTargetAt,
+      currentPoints: String(dbData?.currentPoints ?? totalPoints.points),
+    })
+    return Promise.resolve("[targetPnL] all orders are completed")
+  } else if (isMaxProfitEnabled && totalPoints.points > dbData.trailingMaxProfitPoints!) {
 
-*/
-    
-  {
-    dbData.trailingMaxLossPoints=dbData.trailingMaxProfitPoints!
-    dbData.trailingMaxProfitPoints=round(1.1*dbData.trailingMaxProfitPoints!)
-    await putValuestoDb(initialJobData.id!,dbData);
-    
+    const trailingProfitMultiplier = 1 + (trailingProfitPercent || 10) / 100
+    const newTrailingMaxProfitPoints = round(
+      trailingProfitMultiplier * dbData.trailingMaxProfitPoints!,0.1
+    )
+    await patchDbTrade(initialJobData.id!, {
+      lastTargetAt: dbData.lastTargetAt,
+      currentPoints: String(dbData.currentPoints),
+      trailingMaxLossPoints: String(dbData.trailingMaxProfitPoints),
+      trailingMaxProfitPoints: String(newTrailingMaxProfitPoints),
+    })
+    dbData.trailingMaxLossPoints = dbData.trailingMaxProfitPoints
+    dbData.trailingMaxProfitPoints = newTrailingMaxProfitPoints
+
     // try{
     //     await squareOffTag(orderTag!, kite)
     // }
@@ -107,29 +102,32 @@ const targetPnL = async ({
     //   console.log('[targetPnL]error in squaring Off', error)
 
     // }
-    return Promise.reject(new Error(`[targetPnL] Updated with new profit ${dbData.trailingMaxProfitPoints} and SL ${dbData.trailingMaxLossPoints}`));
+    return Promise.reject(
+      new Error(
+        `[targetPnL] Updated with new profit ${dbData.trailingMaxProfitPoints} and SL ${dbData.trailingMaxLossPoints}`
+      )
+    )
     //Square off the tag
-  }
-  else if
-  (isMaxLossEnabled && totalPoints.points<(dbData.trailingMaxLossPoints!))
-  {
-    console.log(`[targetPnL]squaring Off as loss is breached ${dbData.trailingMaxLossPoints}`);
-    await putValuestoDb(initialJobData.id!,dbData);
-    try{
-        await squareOffTag(orderTag!, kite)
+  } else if (isMaxLossEnabled && totalPoints.points < dbData.trailingMaxLossPoints!) {
+    logger.info(`[targetPnL]squaring Off as loss is breached ${dbData.trailingMaxLossPoints}`)
+    await patchDbTrade(initialJobData.id!, {
+      lastTargetAt: dbData.lastTargetAt,
+      currentPoints: String(dbData.currentPoints),
+    })
+    try {
+      await squareOffTag(orderTag!, kite)
+    } catch (error) {
+      logger.error("[targetPnL]error in squaring Off", error)
     }
-    catch (error) {
-      console.log('[targetPnL]error in squaring Off', error)
-
-    }
-    return Promise.resolve('[targetPnL] orders are squared off as loss has been breached');
+    return Promise.resolve("[targetPnL] orders are squared off as loss has been breached")
     //Square off the tag
+  } else {
+    await patchDbTrade(initialJobData.id!, {
+      lastTargetAt: dbData.lastTargetAt,
+      currentPoints: String(dbData.currentPoints),
+    })
+    const rejectMsg = `🟢[targetPnL] retry for tag: ${orderTag} Points: ${totalPoints.points} `
+    return Promise.reject(new Error(rejectMsg))
   }
-  else
-  {
-    await putValuestoDb(initialJobData.id!,dbData);
-  const rejectMsg = `🟢[targetPnL] retry for tag: ${orderTag} Points: ${totalPoints.points} `;
-    return Promise.reject(new Error(rejectMsg));
-  }
-  }
-export default targetPnL;
+}
+export default targetPnL

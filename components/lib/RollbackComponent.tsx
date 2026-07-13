@@ -1,26 +1,18 @@
-import React, { useEffect, useState } from 'react'
-import {
-  Checkbox,
-  FormControl,
-  FormControlLabel,
-  FormGroup,
-  Grid
-} from '@mui/material'
-import { ROLLBACK_KEY_MAP } from '../../lib/constants'
-import { ROLLBACK_TYPE } from '../../types/plans'
+import React, { useEffect, useState } from "react"
+import { Checkbox, FormControl, FormControlLabel, FormGroup, Grid } from "@mui/material"
+import { ROLLBACK_KEY_MAP } from "../../lib/constants"
+import { ROLLBACK_TYPE } from "../../types/plans"
 
 interface RollbackComponentProps {
   rollback: ROLLBACK_TYPE
-  onChange: ({rollback}:{ rollback: ROLLBACK_TYPE }) => void
+  onChange: ({ rollback }: { rollback: ROLLBACK_TYPE }) => void
 }
 
 const RollbackComponent = ({ rollback, onChange }: RollbackComponentProps) => {
-  const getIsSomeRollbackOptionEnabled = () =>
-    !!Object.keys(rollback).find(key => rollback[key])
-  const [
-    isSomeRollbackOptionEnabled,
-    setIsSomeRollbackOptionEnabled
-  ] = useState(() => getIsSomeRollbackOptionEnabled())
+  const getIsSomeRollbackOptionEnabled = () => !!Object.keys(rollback).find(key => rollback[key])
+  const [isSomeRollbackOptionEnabled, setIsSomeRollbackOptionEnabled] = useState(() =>
+    getIsSomeRollbackOptionEnabled()
+  )
 
   useEffect(() => {
     setIsSomeRollbackOptionEnabled(getIsSomeRollbackOptionEnabled())
@@ -28,11 +20,11 @@ const RollbackComponent = ({ rollback, onChange }: RollbackComponentProps) => {
 
   return (
     <Grid item xs={12}>
-      <FormControl component='fieldset'>
+      <FormControl component="fieldset">
         <FormGroup>
           <FormControlLabel
-            key='rollback'
-            label='Rollback trades (BETA)'
+            key="rollback"
+            label="Rollback trades (BETA)"
             control={
               <Checkbox
                 checked={isSomeRollbackOptionEnabled}
@@ -41,10 +33,10 @@ const RollbackComponent = ({ rollback, onChange }: RollbackComponentProps) => {
                     rollback: Object.keys(rollback).reduce(
                       (accum, key) => ({
                         ...accum,
-                        [key]: !isSomeRollbackOptionEnabled
+                        [key]: !isSomeRollbackOptionEnabled,
                       }),
                       {}
-                    )
+                    ),
                   })
                 }
               />
@@ -57,14 +49,14 @@ const RollbackComponent = ({ rollback, onChange }: RollbackComponentProps) => {
                 label={ROLLBACK_KEY_MAP[rollbackKey]}
                 control={
                   <Checkbox
-                    name='rollback'
+                    name="rollback"
                     checked={rollback[rollbackKey]}
                     onChange={() => {
                       onChange({
                         rollback: {
                           ...rollback,
-                          [rollbackKey]: !rollback[rollbackKey]
-                        }
+                          [rollbackKey]: !rollback[rollbackKey],
+                        },
                       })
                     }}
                   />

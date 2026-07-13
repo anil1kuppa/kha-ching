@@ -1,23 +1,18 @@
-import { STRATEGIES } from '../lib/constants'
-import { KiteOrder, KiteProfile } from './kite'
-import { AvailablePlansConfig } from './plans'
+import type { STRATEGIES } from "../lib/constants"
+import type { Order, SessionData } from "kiteconnect"
+import type { AvailablePlansConfig } from "./plans"
 
-export type DailyPlansDayKey =
-  | 'monday'
-  | 'tuesday'
-  | 'wednesday'
-  | 'thursday'
-  | 'friday'
+export type DailyPlansDayKey = "monday" | "tuesday" | "wednesday" | "thursday" | "friday"
 
 export interface DailyPlansDisplayValue {
   heading: string
-  selectedStrategy: STRATEGIES | ''
+  selectedStrategy: STRATEGIES | ""
   strategies: Record<string, AvailablePlansConfig>
 }
 
 export type DailyPlansConfig = Record<DailyPlansDayKey, DailyPlansDisplayValue>
 
-export interface SignalXOrder extends KiteOrder {
+export interface SignalXOrder extends Order {
   humanTradingSymbol: string
 }
 
@@ -25,13 +20,13 @@ export interface combinedOrders {
   tradingsymbol: string
   order_id?: string
   average_price?: number
-  transaction_type: 'BUY' | 'SELL'
-  status?: 'COMPLETE' | 'REJECTED' | 'CANCELLED' | 'OPEN' | 'TRIGGER PENDING'
+  transaction_type: "BUY" | "SELL"
+  status?: "COMPLETE" | "REJECTED" | "CANCELLED" | "OPEN" | "TRIGGER PENDING"
   tag: string
 }
 
 export interface SignalXUser {
-  session: KiteProfile
+  session: SessionData
   isLoggedIn: boolean
 }
 

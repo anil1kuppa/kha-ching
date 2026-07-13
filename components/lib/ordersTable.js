@@ -1,30 +1,35 @@
-import Table from '@mui/material/Table'
-import TableBody from '@mui/material/TableBody'
-import TableCell from '@mui/material/TableCell'
-import TableContainer from '@mui/material/TableContainer'
-import TableHead from '@mui/material/TableHead'
-import TableRow from '@mui/material/TableRow'
-import React from 'react'
+import Table from "@mui/material/Table"
+import TableBody from "@mui/material/TableBody"
+import TableCell from "@mui/material/TableCell"
+import TableContainer from "@mui/material/TableContainer"
+import TableHead from "@mui/material/TableHead"
+import TableRow from "@mui/material/TableRow"
+import React from "react"
 
-export default function OrdersTable ({ rows }) {
+export default function OrdersTable({ rows = [] }) {
+  const safeRows = Array.isArray(rows) ? rows.filter(Boolean) : []
+
   return (
     <TableContainer>
-      <Table size='small' sx={{ maxWidth: '100%' }}>
+      <Table size="small" sx={{ maxWidth: "100%" }}>
         <TableBody>
-          {rows.map((row, idx) => (
-            <TableRow key={idx}>
-              {row.map((cell, rIdx) => (
-                <TableCell
-                  idx={rIdx}
-                  key={cell.value}
-                  align={cell.align || 'left'}
-                  style={idx === 0 ? { fontWeight: 900 } : null}
-                >
-                  {cell.value}
-                </TableCell>
-              ))}
-            </TableRow>
-          ))}
+          {safeRows.map((row, idx) => {
+            const cells = Array.isArray(row) ? row : [{ value: row }]
+
+            return (
+              <TableRow key={idx}>
+                {cells.map((cell, rIdx) => (
+                  <TableCell
+                    key={rIdx}
+                    align={(cell && cell.align) || "left"}
+                    style={idx === 0 ? { fontWeight: 900 } : null}
+                  >
+                    {cell && cell.value != null ? cell.value : ""}
+                  </TableCell>
+                ))}
+              </TableRow>
+            )
+          })}
         </TableBody>
       </Table>
     </TableContainer>

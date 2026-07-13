@@ -1,17 +1,20 @@
-import { KiteConnect } from 'kiteconnect'
+import { KiteConnect } from "kiteconnect"
 
-import withSession from '../../lib/session'
-import { SignalXUser } from '../../types/misc'
+import withSession from "../../lib/session"
+import { SignalXUser } from "../../types/misc"
 
 const apiKey = process.env.KITE_API_KEY
 
 export default withSession(async (req, res) => {
-  const user: SignalXUser = req.session.get('user')
+  const user: SignalXUser = req.session.get("user")
 
   if (user) {
+    if (!apiKey) {
+      return res.status(500).send("KITE_API_KEY not configured")
+    }
     const kc = new KiteConnect({
       api_key: apiKey,
-      access_token: user?.session?.access_token
+      access_token: user?.session?.access_token,
     })
 
     try {
@@ -21,17 +24,17 @@ export default withSession(async (req, res) => {
 
       res.json({
         ...user,
-        isLoggedIn: true
+        isLoggedIn: true,
       })
     } catch (e) {
       req.session.destroy()
       res.json({
-        isLoggedIn: false
+        isLoggedIn: false,
       })
     }
   } else {
     res.json({
-      isLoggedIn: false
+      isLoggedIn: false,
     })
   }
 })

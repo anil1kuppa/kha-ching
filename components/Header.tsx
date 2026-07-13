@@ -1,11 +1,11 @@
 /* eslint-disable jsx-a11y/accessible-emoji */
-import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive'
-import Link from 'next/link'
-import { useRouter } from 'next/router'
-import React, { useEffect, useState } from 'react'
+import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive"
+import Link from "next/link"
+import { useRouter } from "next/router"
+import React, { useEffect, useState } from "react"
 
-import fetchJson from '../lib/fetchJson'
-import useUser from '../lib/useUser'
+import fetchJson from "../lib/fetchJson"
+import useUser from "../lib/useUser"
 
 const APP_GIT_HASH = process.env.NEXT_PUBLIC_GIT_HASH
 
@@ -15,9 +15,8 @@ const Header = () => {
   const [isUpdateAvailable, setIsUpdateAvailable] = useState(false)
 
   useEffect(() => {
-    async function fn () {
-      const url =
-        'https://api.github.com/repos/aakashlpin/kha-ching/commits?per_page=1'
+    async function fn() {
+      const url = "https://api.github.com/repos/aakashlpin/kha-ching/commits?per_page=1"
       try {
         const [commit] = await fetchJson(url)
         const { sha } = commit
@@ -31,7 +30,7 @@ const Header = () => {
   }, [])
 
   useEffect(() => {
-    function fn () {
+    function fn() {
       if (!recentGitHash) {
         return
       }
@@ -48,26 +47,23 @@ const Header = () => {
       <nav>
         <ul>
           <li>
-            <Link href='/dashboard'>
-              Dashboard
-            </Link>
+            <Link href="/dashboard">Dashboard</Link>
           </li>
           <li>
-            <Link href='/plan'>
-              Trade Plan
-            </Link>
+            <Link href="/plan">Trade Plan</Link>
+          </li>
+          <li>
+            <a href="/queues" target="_blank" rel="noreferrer">Queues</a>
           </li>
           {!user?.isLoggedIn && (
             <li>
-              <Link href='/'>
-                Login
-              </Link>
+              <Link href="/">Login</Link>
             </li>
           )}
           {user?.isLoggedIn && (
             <>
               <li>
-                <Link href='/profile'>
+                <Link href="/profile">
                   {user?.session?.avatar_url && (
                     <img
                       alt={user.session.user_shortname}
@@ -81,11 +77,11 @@ const Header = () => {
               </li>
               <li>
                 <a
-                  href='/api/logout'
+                  href="/api/logout"
                   onClick={async e => {
                     e.preventDefault()
-                    await mutateUser(fetchJson('/api/logout'))
-                    router.push('/')
+                    await mutateUser(fetchJson("/api/logout"))
+                    router.push("/")
                   }}
                 >
                   Logout
@@ -95,11 +91,8 @@ const Header = () => {
           )}
           {isUpdateAvailable ? (
             <li>
-              <a
-                href='https://cloud.digitalocean.com/apps'
-                title='App update available'
-              >
-                <NotificationsActiveIcon color='inherit' />
+              <a href="https://cloud.digitalocean.com/apps" title="App update available">
+                <NotificationsActiveIcon color="inherit" />
               </a>
             </li>
           ) : null}

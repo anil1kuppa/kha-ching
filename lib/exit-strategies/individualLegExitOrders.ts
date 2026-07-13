@@ -1,18 +1,22 @@
-import { KiteOrder } from '../../types/kite'
-import { combinedOrders } from '../../types/misc'
-import { SL_ORDER_TYPE } from '../../types/plans'
-import { SUPPORTED_TRADE_CONFIG } from '../../types/trade'
-import console from '../logging'
-import { addToNextQueue, TARGETPNL_Q_NAME } from '../queue'
-import orderResponse from '../strategies/mockData/orderResponse'
+import type { KiteOrder } from "../../types/kite"
+import { combinedOrders } from "../../types/misc"
+import { SL_ORDER_TYPE } from "../../types/plans"
+import type { ATM_STRADDLE_TRADE, ATM_STRANGLE_TRADE, SUPPORTED_TRADE_CONFIG } from "../../types/trade"
+
+type StraddleOrStrangleTrade = ATM_STRADDLE_TRADE | ATM_STRANGLE_TRADE
+import { STATUS_TRIGGER_PENDING } from "../constants"
+import { syncGetKiteInstance } from "../kiteUtils"
+import logger from "../logger"
+import { addToNextQueue, TARGETPNL_Q_NAME } from "../queue"
+import orderResponse from "../strategies/mockData/orderResponse"
+import { remoteOrderSuccessEnsurer } from "../kiteUtils"
 import {
   attemptBrokerOrders,
   isUntestedFeaturesEnabled,
-  remoteOrderSuccessEnsurer,
+  logDeep,
   round,
-  syncGetKiteInstance,
-  logDeep} from '../utils'
-import { doDeletePendingOrders, doSquareOffPositions } from './autoSquareOff'
+} from "../utils"
+import { doDeletePendingOrders, doSquareOffPositions } from "./autoSquareOff"
 
 export const convertSlmToSll = (
   slmOrder: KiteOrder,
@@ -20,8 +24,7 @@ export const convertSlmToSll = (
   kite: any
 ): KiteOrder => {
   const sllOrder = { ...slmOrder }
-  const absoluteLimitPriceDelta =
-    ((slLimitPricePercent ?? 0) / 100) * sllOrder.trigger_price!
+  const absoluteLimitPriceDelta = ((slLimitPricePercent ?? 0) / 100) * sllOrder.trigger_price!
   let absoluteLimitPrice
   if (sllOrder.transaction_type === kite.TRANSACTION_TYPE_SELL) {
     absoluteLimitPrice = sllOrder.trigger_price! - absoluteLimitPriceDelta
@@ -43,10 +46,10 @@ export const convertSlmToSll = (
   return sllOrder
 }
 
-async function individualLegExitOrders ({
+async function individualLegExitOrders({
   _kite,
   initialJobData,
-  rawKiteOrdersResponse
+  rawKiteOrdersResponse,
 }: {
   _kite?: any
   initialJobData: SUPPORTED_TRADE_CONFIG
@@ -66,11 +69,11 @@ async function individualLegExitOrders ({
     instrument,
     // isMaxLossEnabled,
     // isMaxProfitEnabled
-  } = initialJobData
+  } = initialJobData as StraddleOrStrangleTrade
 
   const slOrderType = SL_ORDER_TYPE.SLL
   const kite = _kite || syncGetKiteInstance(user)
-  
+
   const exitOrders = completedOrders.map(order => {
     const {
       tradingsymbol,
@@ -78,7 +81,7 @@ async function individualLegExitOrders ({
       transaction_type: transactionType,
       product,
       quantity,
-      average_price: avgOrderPrice
+      average_price: avgOrderPrice,
     } = order
     // if (isMaxLossEnabled ||isMaxProfitEnabled)
     // totalOrders.push (order);
@@ -105,7 +108,7 @@ async function individualLegExitOrders ({
       tag: orderTag!,
       product,
       tradingsymbol,
-      exchange
+      exchange,
     }
 
     if (slOrderType === SL_ORDER_TYPE.SLL) {
@@ -113,17 +116,17 @@ async function individualLegExitOrders ({
     }
 
     exitOrder.trigger_price = round(exitOrder.trigger_price!)
-    console.log('placing exit orders...', exitOrder)
+    logger.info("placing exit orders...", exitOrder)
     return exitOrder
   })
 
   const exitOrderPrs = exitOrders.map(async order =>
     remoteOrderSuccessEnsurer({
       _kite: kite,
-      ensureOrderState: 'TRIGGER PENDING',
+      ensureOrderState: STATUS_TRIGGER_PENDING,
       orderProps: order,
       instrument,
-      user: user!
+      user: user!,
     })
   )
 
@@ -131,19 +134,18 @@ async function individualLegExitOrders ({
   if (!allOk && rollback?.onBrokenExitOrders) {
     await doDeletePendingOrders(statefulOrders, kite)
     await doSquareOffPositions(completedOrders, kite, {
-      orderTag
+      orderTag,
     })
 
-    throw Error('rolled back onBrokenExitOrders')
+    throw Error("rolled back onBrokenExitOrders")
   }
 
   if (slOrderType === SL_ORDER_TYPE.SLL) {
-
     try {
       await Promise.all(statefulOrders)
     } catch (e) {
-      console.log('error adding to `watcherQueueJobs`')
-      console.log(e.message ? e.message : e)
+      logger.error("error adding to `watcherQueueJobs`")
+      logger.info(e.message ? e.message : e)
     }
   }
   // if (isMaxLossEnabled ||isMaxProfitEnabled)

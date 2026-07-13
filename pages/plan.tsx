@@ -1,42 +1,30 @@
-import { Box, Container, Link, Paper } from '@mui/material'
-import Accordion from '@mui/material/Accordion'
-import AccordionDetails from '@mui/material/AccordionDetails'
-import AccordionSummary from '@mui/material/AccordionSummary'
-import Backdrop from '@mui/material/Backdrop'
-import Button from '@mui/material/Button'
-import Chip from '@mui/material/Chip'
-import Fade from '@mui/material/Fade'
-import FormControl from '@mui/material/FormControl'
-import Grid from '@mui/material/Grid'
-import InputLabel from '@mui/material/InputLabel'
-import MenuItem from '@mui/material/MenuItem'
-import Modal from '@mui/material/Modal'
-import Select from '@mui/material/Select'
-import Typography from '@mui/material/Typography'
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
-import axios from 'axios'
-import { omit } from 'lodash'
-import React, { useEffect, useState } from 'react'
-import Layout from '../components/Layout'
-import ATMStraddleTradeForm from '../components/trades/atmStraddle/TradeSetupForm'
-import ATMStrangleTradeForm from '../components/trades/atmStrangle/TradeSetupForm'
-import DOSTradeForm from '../components/trades/directionalOptionSelling/TradeSetupForm'
-import OTSTradeForm from '../components/trades/overnightTrendSelling/TradeSetupForm'
-import { getSchedulingStateProps } from '../lib/browserUtils'
-import {
-  INSTRUMENTS,
-  INSTRUMENT_DETAILS,
-  STRATEGIES,
-  STRATEGIES_DETAILS
-} from '../lib/constants'
-import { DailyPlansConfig, DailyPlansDayKey } from '../types/misc'
-import {
-  ATM_STRADDLE_CONFIG,
-  ATM_STRANGLE_CONFIG,
-  AvailablePlansConfig,
-  DIRECTIONAL_OPTION_SELLING_CONFIG,
-  OTS_CONFIG
-} from '../types/plans'
+import { Box, Container, Link, Paper, TextField } from "@mui/material"
+import Accordion from "@mui/material/Accordion"
+import AccordionDetails from "@mui/material/AccordionDetails"
+import AccordionSummary from "@mui/material/AccordionSummary"
+import Backdrop from "@mui/material/Backdrop"
+import Button from "@mui/material/Button"
+import Chip from "@mui/material/Chip"
+import Fade from "@mui/material/Fade"
+import FormControl from "@mui/material/FormControl"
+import Grid from "@mui/material/Grid"
+import InputLabel from "@mui/material/InputLabel"
+import MenuItem from "@mui/material/MenuItem"
+import Modal from "@mui/material/Modal"
+import Select from "@mui/material/Select"
+import Typography from "@mui/material/Typography"
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
+import axios from "axios"
+import { omit } from "lodash"
+import React, { useEffect, useState } from "react"
+import Layout from "../components/Layout"
+import ATMStraddleTradeForm from "../components/trades/atmStraddle/TradeSetupForm"
+import ATMStrangleTradeForm from "../components/trades/atmStrangle/TradeSetupForm"
+import { getSchedulingStateProps } from "../lib/browserUtils"
+import { EXPIRY_TYPE, INSTRUMENTS, INSTRUMENT_DETAILS, PRODUCT_TYPE, STRATEGIES, STRATEGIES_DETAILS } from "../lib/constants"
+import useUser from "../lib/useUser"
+import { DailyPlansConfig, DailyPlansDayKey } from "../types/misc"
+import { ATM_STRADDLE_CONFIG, ATM_STRANGLE_CONFIG, AvailablePlansConfig } from "../types/plans"
 
 /**
  *
@@ -53,49 +41,46 @@ interface StrategySelection {
 const getDefaultState = (strategy: STRATEGIES): AvailablePlansConfig =>
   ({
     ...STRATEGIES_DETAILS[strategy].defaultFormState,
-    ...getSchedulingStateProps(strategy)
-  } as AvailablePlansConfig)
+    ...getSchedulingStateProps(strategy),
+  }) as unknown as AvailablePlansConfig
 
 const resetDefaultStratState = (): Record<STRATEGIES, AvailablePlansConfig> => {
   return {
     [STRATEGIES.ATM_STRADDLE]: getDefaultState(STRATEGIES.ATM_STRADDLE),
     [STRATEGIES.ATM_STRANGLE]: getDefaultState(STRATEGIES.ATM_STRANGLE),
-    [STRATEGIES.DIRECTIONAL_OPTION_SELLING]: getDefaultState(
-      STRATEGIES.DIRECTIONAL_OPTION_SELLING
-    ),
-    [STRATEGIES.OVERNIGHT_TREND_STATEGY]: getDefaultState(
-      STRATEGIES.OVERNIGHT_TREND_STATEGY
-    )
+    [STRATEGIES.SUBSCRIBE_CHASE]: getDefaultState(STRATEGIES.SUBSCRIBE_CHASE),
   } as Record<STRATEGIES, AvailablePlansConfig>
 }
 
 const Plan = () => {
+  useUser({ redirectTo: "/" })
+
   const [dayState, setDayState] = useState<DailyPlansConfig>({
     monday: {
-      heading: 'Monday',
-      selectedStrategy: '',
-      strategies: {}
+      heading: "Monday",
+      selectedStrategy: "",
+      strategies: {},
     },
     tuesday: {
-      heading: 'Tuesday',
-      selectedStrategy: '',
-      strategies: {}
+      heading: "Tuesday",
+      selectedStrategy: "",
+      strategies: {},
     },
     wednesday: {
-      heading: 'Wednesday',
-      selectedStrategy: '',
-      strategies: {}
+      heading: "Wednesday",
+      selectedStrategy: "",
+      strategies: {},
     },
     thursday: {
-      heading: 'Thursday',
-      selectedStrategy: '',
-      strategies: {}
+      heading: "Thursday",
+      selectedStrategy: "",
+      strategies: {},
     },
     friday: {
-      heading: 'Friday',
-      selectedStrategy: '',
-      strategies: {}
-    }
+      heading: "Friday",
+      selectedStrategy: "",
+      strategies: {},
+    },
   })
   const [open, setOpen] = useState(false)
   const [currentEditDay, setCurrentEditDay] = useState<DailyPlansDayKey>()
@@ -111,23 +96,17 @@ const Plan = () => {
     setOpen(false)
   }
 
-  const handleSelectStrategy = ({
-    dayOfWeek,
-    selectedStrategy
-  }: StrategySelection) => {
+  const handleSelectStrategy = ({ dayOfWeek, selectedStrategy }: StrategySelection) => {
     setDayState({
       ...dayState,
       [dayOfWeek]: {
         ...dayState[dayOfWeek],
-        selectedStrategy
-      }
+        selectedStrategy,
+      },
     })
   }
 
-  const onClickConfigureStrategy = ({
-    dayOfWeek,
-    selectedStrategy
-  }: StrategySelection) => {
+  const onClickConfigureStrategy = ({ dayOfWeek, selectedStrategy }: StrategySelection) => {
     setCurrentEditDay(dayOfWeek)
     setCurrentEditStrategy(selectedStrategy)
     setStratState(resetDefaultStratState())
@@ -138,24 +117,24 @@ const Plan = () => {
     changedProps: Partial<AvailablePlansConfig>,
     strategy: STRATEGIES
   ) => {
-    if (changedProps.instruments != null) {
+    if ("instruments" in changedProps && changedProps.instruments != null) {
       setStratState({
         ...stratState,
         [strategy]: {
           ...stratState[strategy],
           instruments: {
-            ...stratState[strategy].instruments,
-            ...changedProps.instruments
-          }
-        }
+            ...(stratState[strategy] as ATM_STRADDLE_CONFIG | ATM_STRANGLE_CONFIG).instruments,
+            ...(changedProps as ATM_STRADDLE_CONFIG | ATM_STRANGLE_CONFIG).instruments,
+          },
+        },
       })
     } else {
       setStratState({
         ...stratState,
         [strategy]: {
           ...stratState[strategy],
-          ...changedProps
-        }
+          ...changedProps,
+        },
       })
     }
   }
@@ -165,7 +144,7 @@ const Plan = () => {
   }
 
   const cleanupForRemoteSync = (props: AvailablePlansConfig) => {
-    return omit(props, ['instruments', 'disableInstrumentChange'])
+    return omit(props, ["instruments", "disableInstrumentChange"])
   }
 
   const commonOnSubmitHandler = async (
@@ -174,36 +153,77 @@ const Plan = () => {
     const selectedConfig = stratState[currentEditStrategy!]
     // console.log('commonOnSubmitHandler', selectedConfig)
 
+    if (currentEditStrategy === STRATEGIES.SUBSCRIBE_CHASE) {
+      const chaseConfig = cleanupForRemoteSync({
+        ...selectedConfig,
+        strategy: STRATEGIES.SUBSCRIBE_CHASE,
+        name: "Chase",
+        instrument: INSTRUMENTS.NIFTY,
+        expiryType: EXPIRY_TYPE.CURRENT,
+        productType: PRODUCT_TYPE.NRML,
+      } as any)
+
+      let chaseUpdatedConfig
+      if (selectedConfig.id) {
+        await axios.put("/api/plan", {
+          id: selectedConfig.id,
+          dayOfWeek: currentEditDay?.toUpperCase(),
+          config: chaseConfig,
+        })
+        chaseUpdatedConfig = { [selectedConfig.id]: { ...chaseConfig, id: selectedConfig.id } }
+      } else {
+        const { data: newConfig } = await axios.post("/api/plan", {
+          dayOfWeek: currentEditDay?.toUpperCase(),
+          config: [chaseConfig],
+        })
+        chaseUpdatedConfig = { [newConfig.id]: newConfig }
+      }
+
+      setDayState({
+        ...dayState,
+        [currentEditDay as string]: {
+          ...dayState[currentEditDay!],
+          strategies: {
+            ...dayState[currentEditDay!].strategies,
+            ...chaseUpdatedConfig,
+          },
+        },
+      })
+      handleClose()
+      return
+    }
+
     let updatedConfig
     if (selectedConfig.id) {
       // editing an existing strategy
-      await axios.put('/api/plan', {
+      await axios.put("/api/plan", {
         id: selectedConfig.id,
-        dayOfWeek: currentEditDay,
+        dayOfWeek: currentEditDay?.toUpperCase(),
         config: cleanupForRemoteSync({
           ...selectedConfig,
-          ...formattedStateForApiProps
-        } as AvailablePlansConfig)
+          ...formattedStateForApiProps,
+        } as AvailablePlansConfig),
       })
 
       updatedConfig = { [selectedConfig.id]: selectedConfig }
     } else {
       // creating a new strategy
-      const config = Object.keys(selectedConfig.instruments)
-        .filter(instrument => selectedConfig.instruments[instrument])
+      const straddleOrStrangleConfig = selectedConfig as ATM_STRADDLE_CONFIG | ATM_STRANGLE_CONFIG
+      const config = Object.keys(straddleOrStrangleConfig.instruments)
+        .filter(instrument => straddleOrStrangleConfig.instruments[instrument])
         .map(
           (instrument): AvailablePlansConfig => ({
             ...selectedConfig,
             ...formattedStateForApiProps,
             instrument: instrument as INSTRUMENTS,
-            strategy: currentEditStrategy as any
+            strategy: currentEditStrategy as any,
           })
         )
         .map(cleanupForRemoteSync)
 
-      const { data: newStrategyConfig } = await axios.post('/api/plan', {
-        dayOfWeek: currentEditDay,
-        config
+      const { data: newStrategyConfig } = await axios.post("/api/plan", {
+        dayOfWeek: currentEditDay?.toUpperCase(),
+        config,
       })
 
       // updatedConfig = newStrategyConfig.reduce(
@@ -213,7 +233,7 @@ const Plan = () => {
       //   }),
       //   {}
       // )
-      console.log('[plan.tsx]:',newStrategyConfig)
+      console.log("[plan.tsx]:", newStrategyConfig)
       updatedConfig = { [newStrategyConfig.id]: newStrategyConfig }
       //updatedConfig[newStrategyConfig.id]=newStrategyConfig
     }
@@ -224,16 +244,16 @@ const Plan = () => {
         ...dayState[currentEditDay!],
         strategies: {
           ...dayState[currentEditDay!].strategies,
-          ...updatedConfig
-        }
-      }
+          ...updatedConfig,
+        },
+      },
     })
     handleClose()
   }
 
   const handleEditStrategyConfig = ({
     dayOfWeek,
-    strategyKey
+    strategyKey,
   }: {
     dayOfWeek: DailyPlansDayKey
     strategyKey: string
@@ -242,39 +262,44 @@ const Plan = () => {
     const stratConfig = dayState[dayOfWeek].strategies[strategyKey]
     const { strategy } = stratConfig
     setCurrentEditStrategy(strategy)
-    setStratState({
-      ...stratState,
-      [strategy]: {
-        // spread the default state so as to future proof new properties getting added in the base strategy
-        // note that the plan will need to be backwards compatible with new props that
-        // newly exist in defaultFormState but don't exist in stratConfig
-        ...STRATEGIES_DETAILS[strategy].defaultFormState,
-        ...stratConfig,
-        instruments: { [stratConfig.instrument]: true } as Record<
-          INSTRUMENTS,
-          boolean
-        >,
-        disableInstrumentChange: true
-      }
-    })
+
+    if (strategy === STRATEGIES.SUBSCRIBE_CHASE) {
+      setStratState({
+        ...stratState,
+        [strategy]: {
+          ...STRATEGIES_DETAILS[strategy].defaultFormState,
+          ...stratConfig,
+        },
+      })
+    } else {
+      setStratState({
+        ...stratState,
+        [strategy]: {
+          ...STRATEGIES_DETAILS[strategy].defaultFormState,
+          ...stratConfig,
+          instruments: { [stratConfig.instrument]: true } as Record<INSTRUMENTS, boolean>,
+          disableInstrumentChange: true,
+        },
+      })
+    }
 
     handleOpen()
   }
 
   const handleDeleteStrategyConfig = async ({
     dayOfWeek,
-    strategyKey
+    strategyKey,
   }: {
     dayOfWeek: DailyPlansDayKey
     strategyKey: string
   }) => {
     const stratConfig = dayState[dayOfWeek].strategies[strategyKey]
-    await axios.delete('/api/plan', {
+    await axios.delete("/api/plan", {
       // notice the change in payload for delete request
       data: {
         dayOfWeek: currentEditDay,
-        config: stratConfig
-      }
+        config: stratConfig,
+      },
     })
 
     setDayState({
@@ -286,11 +311,11 @@ const Plan = () => {
           .reduce(
             (accum, key) => ({
               ...accum,
-              [key]: dayState[dayOfWeek].strategies[key]
+              [key]: dayState[dayOfWeek].strategies[key],
             }),
             {}
-          )
-      }
+          ),
+      },
     })
   }
 
@@ -299,21 +324,26 @@ const Plan = () => {
   // }, []);
 
   useEffect(() => {
-    async function fn () {
-      const { data } = await axios('/api/plan')
+    async function fn() {
+      const { data } = await axios("/api/plan")
       const dayWiseData = data.reduce((accum, config) => {
-        if (accum[config.collection]) {
+        const dayKey = (config.day_of_week || config.dayOfWeek || config.collection)?.toLowerCase()
+        if (!dayKey) {
+          return accum
+        }
+
+        if (accum[dayKey]) {
           return {
             ...accum,
-            [config.collection]: {
-              ...accum[config.collection],
-              [config.id]: config
-            }
+            [dayKey]: {
+              ...accum[dayKey],
+              [config.id]: config,
+            },
           }
         }
         return {
           ...accum,
-          [config.collection]: { [config.id]: config }
+          [dayKey]: { [config.id]: config },
         }
       }, {})
       const updatedDayState: DailyPlansConfig = Object.keys(dayState).reduce(
@@ -322,13 +352,13 @@ const Plan = () => {
             ...accum,
             [dayKey]: {
               ...dayState[dayKey],
-              strategies: dayWiseData[dayKey] || {}
-            }
+              strategies: dayWiseData[dayKey] || {},
+            },
           }
         },
         {}
       )
-      
+
       setDayState(updatedDayState)
     }
 
@@ -337,7 +367,7 @@ const Plan = () => {
 
   return (
     <Layout>
-      <Typography variant='h5' component='h1' style={{ marginBottom: 16 }}>
+      <Typography variant="h5" component="h1" style={{ marginBottom: 16 }}>
         Your daily trade plan
       </Typography>
       {Object.keys(dayState).map((dayOfWeek: DailyPlansDayKey) => {
@@ -349,40 +379,45 @@ const Plan = () => {
               aria-controls={`${dayOfWeek}-content`}
               id={`${dayOfWeek}-header`}
             >
-              <Typography sx={{ fontSize: '0.9375rem', fontWeight: 400 }}>
+              <Typography sx={{ fontSize: "0.9375rem", fontWeight: 400 }}>
                 {dayProps.heading}
               </Typography>
             </AccordionSummary>
-            <AccordionDetails sx={{ flexDirection: 'column' }}>
+            <AccordionDetails sx={{ flexDirection: "column" }}>
               {Object.keys(dayProps.strategies).length > 0 ? (
                 <>
-                  <Typography component='p' variant='subtitle1'>
+                  <Typography component="p" variant="subtitle1">
                     Saved trades — (click to edit, or cross to delete)
                   </Typography>
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', marginBottom: '16px', '& > *': { margin: '4px' } }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      marginBottom: "16px",
+                      "& > *": { margin: "4px" },
+                    }}
+                  >
                     {Object.keys(dayProps.strategies)
                       .filter(
-                        strategyKey =>
-                          dayProps.strategies[strategyKey].strategy in
-                          stratState
+                        strategyKey => dayProps.strategies[strategyKey].strategy in stratState
                       )
                       .map(strategyKey => {
                         const config = dayProps.strategies[strategyKey]
                         return (
                           <Chip
-                            color='secondary'
+                            color="secondary"
                             key={`${dayOfWeek}_${strategyKey}`}
                             label={`${config.name}`}
                             onClick={() =>
                               handleEditStrategyConfig({
                                 dayOfWeek,
-                                strategyKey
+                                strategyKey,
                               })
                             }
                             onDelete={async () =>
                               await handleDeleteStrategyConfig({
                                 dayOfWeek,
-                                strategyKey
+                                strategyKey,
                               })
                             }
                           />
@@ -391,11 +426,9 @@ const Plan = () => {
                   </Box>
                 </>
               ) : null}
-              <Grid container alignItems='flex-start' spacing={2}>
+              <Grid container alignItems="flex-start" spacing={2}>
                 <FormControl sx={{ m: 1, minWidth: 120 }}>
-                  <InputLabel id={`${dayOfWeek}_label`}>
-                    Select trade here
-                  </InputLabel>
+                  <InputLabel id={`${dayOfWeek}_label`}>Select trade here</InputLabel>
                   <Select
                     labelId={`${dayOfWeek}_label`}
                     id={`${dayOfWeek}_strat_select`}
@@ -404,20 +437,12 @@ const Plan = () => {
                     onChange={e =>
                       handleSelectStrategy({
                         dayOfWeek,
-                        selectedStrategy: e.target.value as STRATEGIES
+                        selectedStrategy: e.target.value as STRATEGIES,
                       })
                     }
                   >
-                    {[
-                      STRATEGIES.ATM_STRADDLE,
-                      STRATEGIES.ATM_STRANGLE,
-                      STRATEGIES.DIRECTIONAL_OPTION_SELLING,
-                      STRATEGIES.OVERNIGHT_TREND_STATEGY
-                    ].map(strategyKey => (
-                      <MenuItem
-                        value={strategyKey}
-                        key={`${dayOfWeek}_${strategyKey}`}
-                      >
+                    {[STRATEGIES.ATM_STRADDLE, STRATEGIES.ATM_STRANGLE, STRATEGIES.SUBSCRIBE_CHASE].map(strategyKey => (
+                      <MenuItem value={strategyKey} key={`${dayOfWeek}_${strategyKey}`}>
                         {STRATEGIES_DETAILS[strategyKey].heading}
                       </MenuItem>
                     ))}
@@ -425,13 +450,13 @@ const Plan = () => {
                 </FormControl>
                 <Grid item xs={12}>
                   <Button
-                    variant='contained'
-                    color='primary'
-                    type='button'
+                    variant="contained"
+                    color="primary"
+                    type="button"
                     onClick={() =>
                       onClickConfigureStrategy({
                         dayOfWeek,
-                        selectedStrategy: dayProps.selectedStrategy as STRATEGIES
+                        selectedStrategy: dayProps.selectedStrategy as STRATEGIES,
                       })
                     }
                   >
@@ -445,65 +470,75 @@ const Plan = () => {
       })}
       {currentEditStrategy ? (
         <Modal
-          aria-labelledby='transition-modal-title'
-          aria-describedby='transition-modal-description'
-          sx={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', overflow: 'auto', pt: 4 }}
+          aria-labelledby="transition-modal-title"
+          aria-describedby="transition-modal-description"
+          sx={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "flex-start",
+            overflow: "auto",
+            pt: 4,
+          }}
           open={open}
           onClose={handleClose}
           closeAfterTransition
-          BackdropComponent={Backdrop}
-          BackdropProps={{
-            sx: {
-              background: 'rgba(0,0,0,0.5)'
-            },
-            timeout: 500
-          }}
+          slots={{ backdrop: Backdrop }}
+          slotProps={{ backdrop: { timeout: 500 } }}
         >
           <Fade in={open}>
-            <Container maxWidth='sm'>
+            <Container
+              maxWidth="sm"
+              tabIndex={-1}
+              sx={{ outline: "none", position: "relative", zIndex: 1 }}
+            >
               <Box>
-                <Typography variant='subtitle2'>
-                  <Link
-                    onClick={commonOnCancelHandler}
-                    style={{ color: 'white' }}
-                  >
+                <Typography variant="subtitle2">
+                  <Link onClick={commonOnCancelHandler} style={{ color: "white" }}>
                     &lt; cancel and go back
                   </Link>
                 </Typography>
-                {currentEditStrategy ===
-                STRATEGIES.DIRECTIONAL_OPTION_SELLING ? (
-                  <DOSTradeForm
-                    formHeading={`Editing ${
-                      STRATEGIES_DETAILS[currentEditStrategy].heading
-                    } for ${dayState[currentEditDay!].heading}`}
-                    state={
-                      stratState[
-                        STRATEGIES.DIRECTIONAL_OPTION_SELLING
-                      ] as DIRECTIONAL_OPTION_SELLING_CONFIG
-                    }
-                    onChange={changedProps =>
-                      stratOnChangeHandler(
-                        changedProps,
-                        STRATEGIES.DIRECTIONAL_OPTION_SELLING
-                      )
-                    }
-                    onSubmit={commonOnSubmitHandler as any}
-                    onCancel={commonOnCancelHandler}
-                    isRunnable={false}
-                  />
+                {currentEditStrategy === STRATEGIES.SUBSCRIBE_CHASE ? (
+                  <Box sx={{ backgroundColor: "background.paper", p: 3, borderRadius: 1 }}>
+                    <Typography variant="h6" sx={{ mb: 2 }}>Configure Chase</Typography>
+                    <TextField
+                      label="Lots"
+                      type="text"
+                      inputMode="numeric"
+                      inputProps={{ pattern: "[0-9]*" }}
+                      value={
+                        (stratState[STRATEGIES.SUBSCRIBE_CHASE] as any)?.lots
+                          ? String((stratState[STRATEGIES.SUBSCRIBE_CHASE] as any).lots)
+                          : ""
+                      }
+                      onChange={e => {
+                        const raw = e.target.value.replace(/[^0-9]/g, "")
+                        stratOnChangeHandler(
+                          { lots: raw === "" ? 0 : parseInt(raw, 10) } as any,
+                          STRATEGIES.SUBSCRIBE_CHASE
+                        )
+                      }}
+                      onBlur={() => {
+                        const current = (stratState[STRATEGIES.SUBSCRIBE_CHASE] as any)?.lots ?? 0
+                        if (current < 1)
+                          stratOnChangeHandler({ lots: 1 } as any, STRATEGIES.SUBSCRIBE_CHASE)
+                      }}
+                      sx={{ mb: 3 }}
+                    />
+                    <Box sx={{ display: "flex", gap: 2 }}>
+                      <Button variant="contained" onClick={() => commonOnSubmitHandler(stratState[STRATEGIES.SUBSCRIBE_CHASE]!)}>
+                        Add
+                      </Button>
+                      <Button onClick={commonOnCancelHandler}>Cancel</Button>
+                    </Box>
+                  </Box>
                 ) : currentEditStrategy === STRATEGIES.ATM_STRADDLE ? (
                   <ATMStraddleTradeForm
                     formHeading={`Editing ${
                       STRATEGIES_DETAILS[currentEditStrategy].heading
                     } for ${dayState[currentEditDay!].heading}`}
-                    state={
-                      stratState[STRATEGIES.ATM_STRADDLE] as ATM_STRADDLE_CONFIG
-                    }
+                    state={stratState[STRATEGIES.ATM_STRADDLE] as ATM_STRADDLE_CONFIG}
                     onChange={changedProps =>
-                      stratOnChangeHandler(
-                        changedProps,
-                        STRATEGIES.ATM_STRADDLE
-                      )
+                      stratOnChangeHandler(changedProps, STRATEGIES.ATM_STRADDLE)
                     }
                     onSubmit={commonOnSubmitHandler}
                     onCancel={commonOnCancelHandler}
@@ -515,39 +550,14 @@ const Plan = () => {
                     formHeading={`Editing ${
                       STRATEGIES_DETAILS[currentEditStrategy].heading
                     } for ${dayState[currentEditDay!].heading}`}
-                    state={
-                      stratState[STRATEGIES.ATM_STRANGLE] as ATM_STRANGLE_CONFIG
-                    }
+                    state={stratState[STRATEGIES.ATM_STRANGLE] as ATM_STRANGLE_CONFIG}
                     onChange={changedProps =>
-                      stratOnChangeHandler(
-                        changedProps,
-                        STRATEGIES.ATM_STRANGLE
-                      )
+                      stratOnChangeHandler(changedProps, STRATEGIES.ATM_STRANGLE)
                     }
                     onSubmit={commonOnSubmitHandler}
                     onCancel={commonOnCancelHandler}
                     isRunnable={false}
                     strategy={STRATEGIES.ATM_STRANGLE}
-                  />
-                )
-                :currentEditStrategy === STRATEGIES.OVERNIGHT_TREND_STATEGY ? (
-                  <OTSTradeForm
-                    formHeading={`Editing ${
-                      STRATEGIES_DETAILS[currentEditStrategy].heading
-                    } for ${dayState[currentEditDay!].heading}`}
-                    state={
-                      stratState[STRATEGIES.OVERNIGHT_TREND_STATEGY] as OTS_CONFIG
-                    }
-                    onChange={changedProps =>
-                      stratOnChangeHandler(
-                        changedProps,
-                        STRATEGIES.OVERNIGHT_TREND_STATEGY
-                      )
-                    }
-                    onSubmit={commonOnSubmitHandler}
-                    onCancel={commonOnCancelHandler}
-                    isRunnable={false}
-                    strategy={STRATEGIES.OVERNIGHT_TREND_STATEGY}
                   />
                 ) : null}
               </Box>

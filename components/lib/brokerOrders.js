@@ -1,16 +1,16 @@
-import { Box, Button, Divider, Grid, Typography } from '@mui/material'
-import Chip from '@mui/material/Chip'
-import FormControl from '@mui/material/FormControl'
-import FormHelperText from '@mui/material/FormHelperText'
-import InputLabel from '@mui/material/InputLabel'
-import MenuItem from '@mui/material/MenuItem'
-import Select from '@mui/material/Select'
-import ScheduleIcon from '@mui/icons-material/Schedule'
-import axios from 'axios'
-import dayjs from 'dayjs'
-import React, { useEffect, useState } from 'react'
+import { Box, Button, Divider, Grid, Typography } from "@mui/material"
+import Chip from "@mui/material/Chip"
+import FormControl from "@mui/material/FormControl"
+import FormHelperText from "@mui/material/FormHelperText"
+import InputLabel from "@mui/material/InputLabel"
+import MenuItem from "@mui/material/MenuItem"
+import Select from "@mui/material/Select"
+import ScheduleIcon from "@mui/icons-material/Schedule"
+import axios from "axios"
+import dayjs from "dayjs"
+import React, { useEffect, useState } from "react"
 
-export default function BrokerOrders ({ orders, trades, dbOrders }) {
+export default function BrokerOrders({ orders, trades, dbOrders }) {
   const [tradeMapByOrderTag, setTradeMapByOrderTag] = useState({})
   const [allTags, setAllTags] = useState([])
 
@@ -26,8 +26,8 @@ export default function BrokerOrders ({ orders, trades, dbOrders }) {
           ...trade,
           selectDisplayName: `${trade.strategy} / ${trade.instrument} / ${
             trade.exitStrategy
-          } / ${dayjs(trade.runAt).format('hh:mm A')}`
-        }
+          } / ${dayjs(trade.runAt).format("hh:mm A")}`,
+        },
       }),
       {}
     )
@@ -37,117 +37,95 @@ export default function BrokerOrders ({ orders, trades, dbOrders }) {
   }, [trades])
 
   const handleChange = async ({ orderId, orderTag }) => {
-    await axios.put('/api/reconcile', {
+    await axios.put("/api/reconcile", {
       orderId,
-      orderTag
+      orderTag,
     })
   }
 
+  if (!Array.isArray(orders) || !orders.length) return null
+
   return (
     <>
-      <Typography variant='subtitle2' style={{ textAlign: 'right' }}>
+      <Typography variant="subtitle2" style={{ textAlign: "right" }}>
         {orders.length} Orders
       </Typography>
       {orders.map((order, idx) => {
         return (
-          <div key={order._id}>
-            <Divider
-              style={
-                idx === 0 ? { margin: '0 0 12px 0' } : { margin: '12px 0' }
-              }
-            />
-            <Box display='flex' justifyContent='space-between'>
+          <div key={order.order_id}>
+            <Divider style={idx === 0 ? { margin: "0 0 12px 0" } : { margin: "12px 0" }} />
+            <Box display="flex" justifyContent="space-between">
               <Box
-                display='flex'
-                flexDirection='column'
-                justifyContent='space-between'
+                display="flex"
+                flexDirection="column"
+                justifyContent="space-between"
                 style={{ marginRight: 8 }}
               >
-                <Box
-                  display='flex'
-                  alignItems='center'
-                  style={{ marginBottom: 4 }}
-                >
+                <Box display="flex" alignItems="center" style={{ marginBottom: 4 }}>
                   <div style={{ marginRight: 8 }}>
                     <Chip
-                      size='small'
-                      disabled={order.status !== 'COMPLETE'}
+                      size="small"
+                      disabled={order.status !== "COMPLETE"}
                       label={order.transaction_type}
-                      color={
-                        order.transaction_type === 'SELL'
-                          ? 'primary'
-                          : 'secondary'
-                      }
+                      color={order.transaction_type === "SELL" ? "primary" : "secondary"}
                     />
                   </div>
-                  <Typography variant='body2'>
+                  <Typography variant="body2">
                     {order.filled_quantity} / {order.quantity}
                   </Typography>
                 </Box>
-                <Typography variant='body2'>
+                <Typography variant="body2">
                   {order.humanTradingSymbol || order.tradingsymbol}
                 </Typography>
-                <Typography variant='body2' sx={{ color: '#636363' }}>
+                <Typography variant="body2" sx={{ color: "#636363" }}>
                   {order.exchange}
                 </Typography>
               </Box>
-              <Box
-                display='flex'
-                flexDirection='column'
-                justifyContent='space-between'
-              >
+              <Box display="flex" flexDirection="column" justifyContent="space-between">
                 <Box
-                  display='flex'
-                  justifyContent='space-between'
-                  alignItems='center'
+                  display="flex"
+                  justifyContent="space-between"
+                  alignItems="center"
                   style={{ marginBottom: 4 }}
                 >
                   <div style={{ marginRight: 8 }}>
                     <Box
-                      display='flex'
-                      justifyContent='space-between'
-                      alignItems='center'
+                      display="flex"
+                      justifyContent="space-between"
+                      alignItems="center"
                       style={{ marginBottom: 4 }}
                     >
                       <ScheduleIcon
-                        fontSize='small'
-                        sx={{ color: 'action.disabled' }}
+                        fontSize="small"
+                        sx={{ color: "action.disabled" }}
                         style={{ marginRight: 2 }}
                       />
-                      <Typography variant='body2'>
-                        {dayjs(order.order_timestamp).format('hh:mm:ss')}
+                      <Typography variant="body2">
+                        {dayjs(order.order_timestamp).format("hh:mm:ss")}
                       </Typography>
                     </Box>
                   </div>
                   <Chip
-                    size='small'
+                    size="small"
                     label={order.status}
                     disabled
-                    color={
-                      order.status === 'COMPLETE' ? 'secondary' : 'default'
-                    }
+                    color={order.status === "COMPLETE" ? "secondary" : "default"}
                   />
                 </Box>
                 <Box>
-                  <Box display='flex' justifyContent='space-between'>
-                    <Typography variant='body2' sx={{ color: '#636363' }}>
-                      {order.average_price
-                        ? 'Avg.'
-                        : order.trigger_price
-                        ? 'SL Trigger'
-                        : null}
+                  <Box display="flex" justifyContent="space-between">
+                    <Typography variant="body2" sx={{ color: "#636363" }}>
+                      {order.average_price ? "Avg." : order.trigger_price ? "SL Trigger" : null}
                     </Typography>
                     <Typography>
-                      {order.average_price?.toFixed(2) ||
-                        order.trigger_price ||
-                        ''}
+                      {order.average_price?.toFixed(2) || order.trigger_price || ""}
                     </Typography>
                   </Box>
-                  <Box display='flex' justifyContent='space-between'>
-                    <Typography variant='body2' sx={{ color: '#636363' }}>
+                  <Box display="flex" justifyContent="space-between">
+                    <Typography variant="body2" sx={{ color: "#636363" }}>
                       {order.product}
                     </Typography>
-                    <Typography variant='body2'>{order.order_type}</Typography>
+                    <Typography variant="body2">{order.order_type}</Typography>
                   </Box>
                 </Box>
               </Box>
@@ -158,14 +136,14 @@ export default function BrokerOrders ({ orders, trades, dbOrders }) {
                   <FormControl sx={{ m: 1, minWidth: 120 }}>
                     <InputLabel id={`tag_${idx}`}>Broker Tag</InputLabel>
                     <Select
-                      style={{ fontSize: '12px' }}
+                      style={{ fontSize: "12px" }}
                       labelId={`tag_${idx}`}
                       id={`tag_${idx}`}
                       value={order.tag}
                       onChange={e =>
                         handleChange({
                           orderId: order.order_id,
-                          orderTag: e.target.value
+                          orderTag: e.target.value,
                         })
                       }
                     >
@@ -181,18 +159,17 @@ export default function BrokerOrders ({ orders, trades, dbOrders }) {
                   </FormControl>
                 </Grid>
                 <Grid item xs={6}>
-                  <Typography variant='subtitle2'>
-                    System tag:{' '}
-                    {dbOrders.find(
-                      dbOrder => dbOrder.order_id === order.order_id
-                    )?.tag || 'Untagged'}
+                  <Typography variant="subtitle2">
+                    System tag:{" "}
+                    {dbOrders?.find(dbOrder => dbOrder.order_id === order.order_id)?.tag ||
+                      "Untagged"}
                     {order.tag ? (
                       <Button
-                        variant='contained'
+                        variant="contained"
                         onClick={() =>
                           handleChange({
                             orderTag: order.tag,
-                            orderId: order.order_id
+                            orderId: order.order_id,
                           })
                         }
                       >

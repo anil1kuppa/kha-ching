@@ -1,14 +1,14 @@
-import { INSTRUMENTS } from '../../lib/constants'
-import optionSellerOptionEntry from '../../lib/queue-processor/optionSellerStrategy/optionEntry'
-import optionSellerEntryWatcher from '../../lib/queue-processor/optionSellerStrategy/optionEntryWatcher'
-import { COMPLETED_ORDER_RESPONSE } from '../../lib/strategies/mockData/orderResponse'
-import optionSellerStrategy from '../../lib/strategies/optionSellerStrategy'
-import { syncGetKiteInstance } from '../../lib/utils'
+import { INSTRUMENTS } from "../../lib/constants"
+import optionSellerOptionEntry from "../../lib/queue-processor/optionSellerStrategy/optionEntry"
+import optionSellerEntryWatcher from "../../lib/queue-processor/optionSellerStrategy/optionEntryWatcher"
+import { COMPLETED_ORDER_RESPONSE } from "../../lib/strategies/mockData/orderResponse"
+import optionSellerStrategy from "../../lib/strategies/optionSellerStrategy"
+import { syncGetKiteInstance } from "../../lib/kiteUtils"
 
 const user = JSON.parse(process.env.USER_SESSION)
 // jest.mock('kite')
 
-test('Should fetch 15 min data', async () => {
+test("Should fetch 15 min data", async () => {
   // const optionInstruments = await optionSellerStrategy({ instrument: INSTRUMENTS.NIFTY })
   // console.log({ optionInstruments })
 
@@ -18,13 +18,13 @@ test('Should fetch 15 min data', async () => {
 
   // console.log({ optionEvaluation })
 
-  jest.spyOn(kite, 'getOrderHistory').mockImplementation(() => {
+  jest.spyOn(kite, "getOrderHistory").mockImplementation(() => {
     return [COMPLETED_ORDER_RESPONSE]
   })
 
-  jest.spyOn(kite, 'placeOrder').mockImplementation(() => {
+  jest.spyOn(kite, "placeOrder").mockImplementation(() => {
     return {
-      order_id: COMPLETED_ORDER_RESPONSE.order_id
+      order_id: COMPLETED_ORDER_RESPONSE.order_id,
     }
   })
 
@@ -35,13 +35,13 @@ test('Should fetch 15 min data', async () => {
     limitOrderAckId: COMPLETED_ORDER_RESPONSE.order_id,
     entryPrice: 5,
     slTriggerPrice: 7,
-    watchForOrderState: 'COMPLETED',
+    watchForOrderState: "COMPLETED",
     initialJobData: {
       user,
-      orderTag: 'adasdad',
-      instrument: INSTRUMENTS.NIFTY
+      orderTag: "adasdad",
+      instrument: INSTRUMENTS.NIFTY,
     },
-    addHedge: true
+    addHedge: true,
   })
 })
 

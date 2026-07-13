@@ -1,0 +1,43 @@
+receivers:
+  file_log:
+    include:
+      - /var/lib/docker/containers/*/*-json.log
+    start_at: beginning
+    include_file_path: true
+    include_file_name: false
+    operators:
+      - type: json_parser
+        timestamp:
+          parse_from: attributes.time
+          layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+      - type: move
+        from: attributes.log
+        to: body
+      - type: move
+        from: attributes.stream
+        to: attributes["log.iostream"]
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+  resource:
+    attributes:
+      - action: insert
+        key: service.name
+        value: kha-ching
+
+exporters:
+  debug:
+    verbosity: normal
+  otlp_http:
+    endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+    headers:
+      Authorization: "${GRAFANA_OTEL_AUTH}"
+
+service:
+  pipelines:
+    logs:
+      receivers: [file_log]
+      processors: [batch, resource]
+      exporters: [debug, otlp_http]

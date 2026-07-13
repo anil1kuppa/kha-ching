@@ -1,4 +1,4 @@
-import { KiteOrder } from '../types/kite'
+import type { KiteOrder } from "../types/kite"
 
 export interface allSettledInterface {
   status: string

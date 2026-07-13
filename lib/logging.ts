@@ -21,7 +21,7 @@ const logging = {
   error: (...args) => {
     console.error(...args)
     // logger.log('error', ...args);
-  }
+  },
 }
 
 export default logging

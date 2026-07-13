@@ -1,34 +1,29 @@
-import { Box, Link, List, ListItem } from '@mui/material'
-import AppBar from '@mui/material/AppBar'
-import Tab from '@mui/material/Tab'
-import Tabs from '@mui/material/Tabs'
-import Typography from '@mui/material/Typography'
-import Alert from '@mui/lab/Alert'
+import { Box, Link, List, ListItem } from "@mui/material"
+import AppBar from "@mui/material/AppBar"
+import Tab from "@mui/material/Tab"
+import Tabs from "@mui/material/Tabs"
+import Typography from "@mui/material/Typography"
+import Alert from "@mui/lab/Alert"
 // import axios from 'axios'
-import dayjs from 'dayjs'
-import { useRouter } from 'next/router'
-import { useEffect, useState } from 'react'
-import SwipeableViews from 'react-swipeable-views'
+import dayjs from "dayjs"
+import { useRouter } from "next/router"
+import { useEffect, useState } from "react"
 // import memoizer from 'memoizee'
 
-import Footer from '../components/Footer'
-import Layout from '../components/Layout'
-import PlanDash from '../components/PlanDash'
-import TradesForDay from '../components/TradesForDay'
-import {
-  STRATEGIES,
-  STRATEGIES_DETAILS,
-  SUBSCRIBER_TYPE
-} from '../lib/constants'
-import useUser from '../lib/useUser'
+import Footer from "../components/Footer"
+import Layout from "../components/Layout"
+import PlanDash from "../components/PlanDash"
+import TradesForDay from "../components/TradesForDay"
+import { STRATEGIES, STRATEGIES_DETAILS, SUBSCRIBER_TYPE } from "../lib/constants"
+import useUser from "../lib/useUser"
 // import { ms } from '../lib/utils'
 
-function TabPanel (props) {
+function TabPanel(props) {
   const { children, value, index, ...other } = props
 
   return (
     <div
-      role='tabpanel'
+      role="tabpanel"
       hidden={value !== index}
       id={`full-width-tabpanel-${index}`}
       aria-labelledby={`full-width-tab-${index}`}
@@ -37,31 +32,24 @@ function TabPanel (props) {
     >
       {value === index && (
         <Box p={3}>
-          <Typography>{children}</Typography>
+          <Box component="div">{children}</Box>
         </Box>
       )}
     </div>
   )
 }
 
-function a11yProps (index) {
+function a11yProps(index) {
   return {
     id: `full-width-tab-${index}`,
-    'aria-controls': `full-width-tabpanel-${index}`
+    "aria-controls": `full-width-tabpanel-${index}`,
   }
 }
 
-const Dashboard = ({
-  isInstallationValid,
-  isExpiringSoon,
-  expireOn,
-  subscriberType
-}) => {
-  const { user } = useUser({ redirectTo: '/' })
+const Dashboard = ({ isInstallationValid, isExpiringSoon, expireOn, subscriberType }) => {
+  const { user } = useUser({ redirectTo: "/" })
   const router = useRouter()
-  const [value, setValue] = useState(() =>
-    router.query?.tabId ? Number(router.query.tabId) : 1
-  )
+  const [value, setValue] = useState(() => (router.query?.tabId ? Number(router.query.tabId) : 1))
 
   useEffect(() => {
     if (router.query?.tabId && router.query?.tabId !== value) {
@@ -77,115 +65,82 @@ const Dashboard = ({
     setValue(newValue)
   }
 
-  const handleChangeIndex = index => {
-    setValue(index)
-  }
-
   return (
     <Layout>
-      <Typography
-        component='h1'
-        variant='h6'
-        style={{ marginBottom: 24, textAlign: 'center' }}
-      >
-        {dayjs().format('dddd')} / {dayjs().format('DD MMM YYYY')}
+      <Typography component="h1" variant="h6" style={{ marginBottom: 24, textAlign: "center" }}>
+        {dayjs().format("dddd")} / {dayjs().format("DD MMM YYYY")}
       </Typography>
 
       {!isInstallationValid ? (
-        <Alert variant='outlined' severity='error' style={{ marginBottom: 24 }}>
-          [IMP] Your SignalX{' '}
-          {subscriberType === SUBSCRIBER_TYPE.PREMIUM ? 'Premium' : 'Club'}{' '}
-          subscription expired on {dayjs(expireOn).format('DD MMM')}. Refer to
-          renewal email or{' '}
+        <Alert variant="outlined" severity="error" style={{ marginBottom: 24 }}>
+          [IMP] Your SignalX {subscriberType === SUBSCRIBER_TYPE.PREMIUM ? "Premium" : "Club"}{" "}
+          subscription expired on {dayjs(expireOn).format("DD MMM")}. Refer to renewal email or{" "}
           <Link
             href={
               subscriberType === SUBSCRIBER_TYPE.PREMIUM
-                ? 'https://imjo.in/q6g7cB'
-                : 'https://imjo.in/SZKjZ9'
+                ? "https://imjo.in/q6g7cB"
+                : "https://imjo.in/SZKjZ9"
             }
           >
             renew here
-          </Link>{' '}
+          </Link>{" "}
           to resume services tomorrow onwards.
         </Alert>
       ) : null}
 
       {isInstallationValid && isExpiringSoon ? (
-        <Alert
-          variant='outlined'
-          severity='warning'
-          style={{ marginBottom: 24 }}
-        >
-          [IMP] Your SignalX{' '}
-          {subscriberType === SUBSCRIBER_TYPE.PREMIUM ? 'Premium' : 'Club'}{' '}
-          subscription expires on {dayjs(expireOn).format('DD MMM')}.{' '}
+        <Alert variant="outlined" severity="warning" style={{ marginBottom: 24 }}>
+          [IMP] Your SignalX {subscriberType === SUBSCRIBER_TYPE.PREMIUM ? "Premium" : "Club"}{" "}
+          subscription expires on {dayjs(expireOn).format("DD MMM")}.{" "}
           <Link
             href={
               subscriberType === SUBSCRIBER_TYPE.PREMIUM
-                ? 'https://imjo.in/q6g7cB'
-                : 'https://imjo.in/SZKjZ9'
+                ? "https://imjo.in/q6g7cB"
+                : "https://imjo.in/SZKjZ9"
             }
           >
             Renew early
-          </Link>{' '}
+          </Link>{" "}
           for uninterrupted services.
         </Alert>
       ) : null}
 
-      <AppBar position='static' color='inherit'>
+      <AppBar position="static" color="inherit">
         <Tabs
           value={value}
           onChange={handleChange}
-          indicatorColor='primary'
-          textColor='primary'
-          variant='fullWidth'
-          aria-label='dashboard options'
+          indicatorColor="primary"
+          textColor="primary"
+          variant="fullWidth"
+          aria-label="dashboard options"
         >
-          <Tab label='Today' {...a11yProps(0)} />
-          <Tab label='New Trade' {...a11yProps(1)} />
-          <Tab label='Plan' {...a11yProps(2)} />
+          <Tab label="Today" {...a11yProps(0)} />
+          <Tab label="New Trade" {...a11yProps(1)} />
+          <Tab label="Plan" {...a11yProps(2)} />
         </Tabs>
       </AppBar>
-      <SwipeableViews axis='x' index={value} onChangeIndex={handleChangeIndex}>
+      <Box>
         <TabPanel value={value} index={0}>
           <TradesForDay />
         </TabPanel>
         <TabPanel value={value} index={1}>
           <List>
             <ListItem>
-              <Link href='/strat/straddle'>
+              <Link href="/strat/straddle">
                 {STRATEGIES_DETAILS[STRATEGIES.ATM_STRADDLE].heading}
               </Link>
             </ListItem>
             <ListItem>
-              <Link href='/strat/strangle'>
+              <Link href="/strat/strangle">
                 {STRATEGIES_DETAILS[STRATEGIES.ATM_STRANGLE].heading}
               </Link>
             </ListItem>
-            <ListItem>
-              <Link href='/strat/ots'>
-                {STRATEGIES_DETAILS[STRATEGIES.OVERNIGHT_TREND_STATEGY].heading}
-              </Link>
-            </ListItem>
-            <ListItem>
-              <Link href='/strat/dos'>
-                {
-                  STRATEGIES_DETAILS[STRATEGIES.DIRECTIONAL_OPTION_SELLING]
-                    .heading
-                }
-              </Link>
-            </ListItem>
-            {/* <ListItem>
-          <Link href="/strat/obs">
-            {STRATEGIES_DETAILS[STRATEGIES.OPTION_BUYING_STRATEGY].heading}
-          </Link>
-        </ListItem> */}
           </List>
         </TabPanel>
         <TabPanel value={value} index={2}>
           <PlanDash />
         </TabPanel>
-      </SwipeableViews>
+      </Box>
 
       <Footer />
     </Layout>
@@ -208,50 +163,12 @@ const Dashboard = ({
 //   promise: true
 // })
 
-export async function getServerSideProps (context) {
+export async function getServerSideProps(context) {
   return {
     props: {
-      isInstallationValid: true
-    }
+      isInstallationValid: true,
+    },
   }
-
-  // const SIGNALX_API_KEY = process.env.SIGNALX_API_KEY
-  // if (!(SIGNALX_API_KEY && SIGNALX_API_KEY.length === 16)) {
-  //   return {
-  //     props: {
-  //       isInstallationValid: true
-  //     }
-  //   }
-  // }
-
-  // try {
-  //   const subscriptionData = await checkSubscriptionStatus(SIGNALX_API_KEY)
-  //   const { isPremiumUser, isClubUser, allowed, expireOn } = subscriptionData
-
-  //   if (!isClubUser && !isPremiumUser) {
-  //     // open source user
-  //     return {
-  //       props: {
-  //         isInstallationValid: true
-  //       }
-  //     }
-  //   }
-
-  //   // either club or premium
-  //   if (!allowed) {
-  //     // refetch immediately if subscription has expired
-  //     checkSubscriptionStatus.delete(SIGNALX_API_KEY, true)
-
-  //     return {
-  //       props: {
-  //         isInstallationValid: false,
-  //         expireOn,
-  //         subscriberType: isClubUser
-  //           ? SUBSCRIBER_TYPE.CLUB
-  //           : SUBSCRIBER_TYPE.PREMIUM
-  //       }
-  //     }
-  //   }
 
   //   // valid subscription
   //   const ttl = dayjs(expireOn).diff(dayjs(), 'days')

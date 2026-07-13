@@ -1,0 +1,38 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: kha-ching-app
+    env_file:
+      - path: .env
+        required: false
+      - path: .env.local
+        required: false
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${PORT:-3000}:3000"
+    restart: unless-stopped
+
+  app-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    container_name: kha-ching-dev
+    env_file:
+      - path: .env
+        required: false
+      - path: .env.local
+        required: false
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    profiles:
+      - dev

@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+.yarn/*
 /.pnp
 .pnp.js
 
@@ -42,3 +43,5 @@ bt_results
 __tests/unit/backtests
 dos*.csv
 oss*.csv
+__tests__/
+**/__tests__/

@@ -1,0 +1,11 @@
+docker exec kha-ching-app node -e "
+const { Queue } = require('bullmq');
+const IORedis = require('ioredis');
+const redis = new IORedis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
+const key = process.env.KITE_API_KEY;
+const queues = ['tradingQueue', 'exitTradingQueue', 'autoSquareOffQueue', 'ancillaryQueue', 'targetPnlQueue']
+  .map(n => new Queue(\`\${n}_\${key}\`, { connection: redis }));
+Promise.all(queues.map(q => q.obliterate({ force: true })))
+  .then(() => { console.log('All queues obliterated'); process.exit(0); })
+  .catch(e => { console.error(e); process.exit(1); });
+" 2>&1
