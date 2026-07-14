@@ -8727,7 +8727,7 @@ __metadata:
     redis: "npm:^3.1.2"
     redis-memoizer: "npm:^1.0.2"
     styled-jsx: "npm:^5.1.7"
-    swr: "npm:^2.2.0"
+    swr: "npm:^2.4.2"
     trace-unhandled: "npm:^2.0.1"
     typescript: "npm:^5.8.3"
     uuid: "npm:^8.3.2"
@@ -11555,15 +11555,15 @@ __metadata:
   languageName: node
   linkType: hard
 
-"swr@npm:^2.2.0":
-  version: 2.4.1
-  resolution: "swr@npm:2.4.1"
+"swr@npm:^2.4.2":
+  version: 2.4.2
+  resolution: "swr@npm:2.4.2"
   dependencies:
     dequal: "npm:^2.0.3"
     use-sync-external-store: "npm:^1.6.0"
   peerDependencies:
     react: ^16.11.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-  checksum: 10c0/34d61fb4653ac8875ad24e7c6da37e210b0e90fce0815dc59f013b7554a0bd267e79aac0f8ae5fbf04992e2a1815ee3da581b0dab3ed6ac4c2ce0e82b351320f
+  checksum: 10c0/fdb54e3cb5e788d4aa53d7db7d541709807c0dde2af41c423e241274cd6595e66dca15a0a310e08a26a49391ff615c153aaa44710016249c2d4c0fe653cc970f
   languageName: node
   linkType: hard
 
