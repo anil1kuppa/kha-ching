@@ -16,6 +16,7 @@ import {
 } from "../kiteUtils"
 import {
   getLatestEma,
+  getEmaByDate,
   insertEma,
   getChaseStatus,
   updateChaseStatus,
@@ -221,8 +222,10 @@ async function processUpdateSL(job: Job) {
           else logger.info(`[processUpdateSL] no open position for ${tradingsymbol} — skipping SL order`)
         }
       } else if (ema <= lastClose && lastClose <= longT1) {
-        newStoploss = Math.max(newStoploss, Math.round((lowestLow + ema) / 2))
-        logger.info(`[processUpdateSL] Update SL to ${newStoploss} as chase is long and lastClose is less than longT1`);
+        const prevDayEma = await getEmaByDate(tradingsymbol, previousTradingDayDayjs.toDate())
+        const previousDayLow = prevDayEma?.lowestLow ?? lowestLow
+        logger.info(`[processUpdateSL] previousDayLow: ${previousDayLow}, ema: ${ema}, as chase is long and lastClose is less than longT1`);
+        newStoploss = Math.max(newStoploss, Math.round((previousDayLow + ema) / 2)) ;
         await postToSlack(`:zap: Action $chase: Update SL for ${tradingsymbol} to ${newStoploss}`)
         await updateChaseStatus({ stoploss: newStoploss, updatedAt: new Date(), tradingsymbol, instrumentToken })
         if (isAutomated && quantity > 0) {
@@ -262,7 +265,10 @@ async function processUpdateSL(job: Job) {
           else logger.info(`[processUpdateSL] no open position for ${tradingsymbol} — skipping SL order`)
         }
       } else if (ema >= lastClose && lastClose >= shortT1) {
-        newStoploss = Math.min(newStoploss, Math.round((highestHigh + ema) / 2))
+        const prevDayEma = await getEmaByDate(tradingsymbol, previousTradingDayDayjs.toDate())
+        const previousDayHigh = prevDayEma?.highestHigh ?? highestHigh
+        logger.info('[processUpdateSL] previousDayHigh:', previousDayHigh, 'ema:', ema)
+        newStoploss = Math.min(newStoploss, Math.round((previousDayHigh + ema) / 2)) // Previous day high
         await postToSlack(`:zap: Action $chase: Update SL for ${tradingsymbol} to ${newStoploss}`)
         await updateChaseStatus({ stoploss: newStoploss, updatedAt: new Date(), tradingsymbol, instrumentToken })
         if (isAutomated && quantity > 0) {

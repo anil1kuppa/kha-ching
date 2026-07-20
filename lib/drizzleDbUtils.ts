@@ -3,45 +3,6 @@ import { db } from "./drizzle"
 import logger from "./logger"
 import { accesstoken, chaseLog, chaseStatus, ema, jobExecutions, transactions } from "./schema"
 
-export async function storeAccessToken(access_token: string): Promise<void> {
-  try {
-await db.execute(
-  sql`SELECT cleanup_old_records()`
-);
-    await db.insert(accesstoken).values({ accessToken: access_token });
-  } catch (error) {
-    logger.error("[storeAccessToken] error:", error)
-  }
-}
-
-export async function getLatestAccessToken(): Promise<string | null> {
-  try {
-    const [row] = await db
-      .select({ accessToken: accesstoken.accessToken })
-      .from(accesstoken)
-      .where(sql`(${accesstoken.createdAt} AT TIME ZONE 'Asia/Kolkata')::date = (NOW() AT TIME ZONE 'Asia/Kolkata')::date`)
-      .orderBy(desc(accesstoken.createdAt))
-      .limit(1)
-    return row?.accessToken ?? null
-  } catch (error) {
-    logger.error("[getLatestAccessToken] error:", error)
-    return null
-  }
-}
-
-export async function checksameToken(access_token: string): Promise<boolean> {
-  try {
-    const latestToken = await getLatestAccessToken()
-    if (!latestToken) {
-      return false
-    }
-    return latestToken === access_token
-  } catch (error) {
-    logger.error("[checksameToken] error:", error)
-    return false
-  }
-}
-
 export interface TransactionData {
   order_timestamp?: Date
   exchange?: string
@@ -57,6 +18,78 @@ export interface TransactionData {
   product?: string
 }
 
+export type EmaRow = {
+  id: number
+  createdAt: Date
+  tradingsymbol: string
+  ema: number
+  instrumentToken: number
+  highestHigh: number
+  lowestLow: number
+  lastClose: number
+}
+
+export type ChaseStatusRow = {
+  id: number
+  createdAt: Date | null
+  updatedAt: Date | null
+  status: string | null
+  tradingsymbol: string | null
+  instrumentToken: number | null
+  stoploss: number | null
+  entryPoint: number | null
+  isSignalBreachingTolerance: boolean | null
+}
+
+/**
+ * Persists a newly issued Zerodha access token, first triggering cleanup of old records.
+ */
+export async function storeAccessToken(access_token: string): Promise<void> {
+  try {
+    await db.execute(sql`SELECT cleanup_old_records()`)
+    await db.insert(accesstoken).values({ accessToken: access_token })
+  } catch (error) {
+    logger.error("[storeAccessToken] error:", error)
+  }
+}
+
+/**
+ * Returns today's most recently stored access token (IST calendar day), or null if none exists.
+ */
+export async function getLatestAccessToken(): Promise<string | null> {
+  try {
+    const [row] = await db
+      .select({ accessToken: accesstoken.accessToken })
+      .from(accesstoken)
+      .where(sql`(${accesstoken.createdAt} AT TIME ZONE 'Asia/Kolkata')::date = (NOW() AT TIME ZONE 'Asia/Kolkata')::date`)
+      .orderBy(desc(accesstoken.createdAt))
+      .limit(1)
+    return row?.accessToken ?? null
+  } catch (error) {
+    logger.error("[getLatestAccessToken] error:", error)
+    return null
+  }
+}
+
+/**
+ * Checks whether the given access token matches today's latest stored token.
+ */
+export async function checksameToken(access_token: string): Promise<boolean> {
+  try {
+    const latestToken = await getLatestAccessToken()
+    if (!latestToken) {
+      return false
+    }
+    return latestToken === access_token
+  } catch (error) {
+    logger.error("[checksameToken] error:", error)
+    return false
+  }
+}
+
+/**
+ * Inserts a single trade transaction record and returns the inserted row.
+ */
 export async function insertTransaction(t: TransactionData): Promise<any> {
   try {
     const result = await db.execute(sql`
@@ -79,6 +112,9 @@ export async function insertTransaction(t: TransactionData): Promise<any> {
   }
 }
 
+/**
+ * Batch-inserts transactions, silently skipping duplicates (conflict-do-nothing).
+ */
 export async function insertMultipleTransactions(
   transactionsData: TransactionData[]
 ): Promise<{ inserted: number; failed: number; skipped: number }> {
@@ -128,6 +164,10 @@ export async function getValuesfromDB(id: string): Promise<Record<string, unknow
   return rows[0] ?? null
 }
 
+/**
+ * Partially updates a job execution record by id and returns the updated row.
+ * Throws if no record matches the given id.
+ */
 export async function patchDbTrade(
   id: string,
   patchProps: Partial<typeof jobExecutions.$inferInsert>
@@ -151,17 +191,9 @@ export async function patchDbTrade(
   }
 }
 
-export type EmaRow = {
-  id: number
-  createdAt: Date
-  tradingsymbol: string
-  ema: number
-  instrumentToken: number
-  highestHigh: number
-  lowestLow: number
-  lastClose: number
-}
-
+/**
+ * Returns the most recent EMA row for a trading symbol, or null if none exists.
+ */
 export async function getLatestEma(tradingsymbol: string): Promise<EmaRow | null> {
   const [row] = await db
     .select()
@@ -186,6 +218,41 @@ export async function getLatestEma(tradingsymbol: string): Promise<EmaRow | null
   }
 }
 
+/**
+ * Returns the latest EMA row for a trading symbol on a specific calendar date (IST), or null if none exists.
+ */
+export async function getEmaByDate(tradingsymbol: string, date: Date): Promise<EmaRow | null> {
+  const [row] = await db
+    .select()
+    .from(ema)
+    .where(
+      and(
+        eq(ema.tradingsymbol, tradingsymbol),
+        sql`(${ema.createdAt} AT TIME ZONE 'Asia/Kolkata')::date = (${date}::timestamptz AT TIME ZONE 'Asia/Kolkata')::date`
+      )
+    )
+    .orderBy(desc(ema.createdAt))
+    .limit(1)
+
+  if (!row) {
+    return null
+  }
+
+  return {
+    id: row.id,
+    createdAt: row.createdAt ?? new Date(),
+    tradingsymbol: row.tradingsymbol,
+    ema: row.ema ?? 0,
+    instrumentToken: row.instrumentToken ?? 0,
+    highestHigh: row.highestHigh ?? 0,
+    lowestLow: row.lowestLow ?? 0,
+    lastClose: row.lastClose ?? 0,
+  }
+}
+
+/**
+ * Inserts a new EMA snapshot row.
+ */
 export async function insertEma(row: {
   createdAt?: Date
   tradingsymbol: string
@@ -206,18 +273,9 @@ export async function insertEma(row: {
   })
 }
 
-export type ChaseStatusRow = {
-  id: number
-  createdAt: Date | null
-  updatedAt: Date | null
-  status: string | null
-  tradingsymbol: string | null
-  instrumentToken: number | null
-  stoploss: number | null
-  entryPoint: number | null
-  isSignalBreachingTolerance: boolean | null
-}
-
+/**
+ * Fetches the singleton chase-status row (id = 1), or null if it hasn't been created yet.
+ */
 export async function getChaseStatus(): Promise<ChaseStatusRow | null> {
   const [row] = await db
     .select()
@@ -226,6 +284,9 @@ export async function getChaseStatus(): Promise<ChaseStatusRow | null> {
   return row ?? null
 }
 
+/**
+ * Partially updates the singleton chase-status row (id = 1), setting `updatedAt` automatically.
+ */
 export async function updateChaseStatus(fields: {
   status?: string
   tradingsymbol?: string
@@ -259,6 +320,9 @@ export async function updateChaseStatus(fields: {
   }
 }
 
+/**
+ * Returns today's SUBSCRIBE_CHASE job execution (for its lot size), or null if none was scheduled today.
+ */
 export async function getSubscribeChaseJob(): Promise<{ lots: number | null } | null> {
   const [row] = await db
     .select({ lots: jobExecutions.lots })
@@ -273,6 +337,9 @@ export async function getSubscribeChaseJob(): Promise<{ lots: number | null } | 
   return row ?? null
 }
 
+/**
+ * Inserts a chase-order log entry recording a fill's symbol, side, and price.
+ */
 export async function insertChaseLog(row: {
   tradingsymbol: string
   transactionType: string
@@ -295,6 +362,7 @@ export default {
   insertMultipleTransactions,
   patchDbTrade,
   getLatestEma,
+  getEmaByDate,
   insertEma,
   getChaseStatus,
   updateChaseStatus,
