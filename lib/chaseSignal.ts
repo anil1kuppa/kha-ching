@@ -1,14 +1,13 @@
 import dayjs from "dayjs"
-import type { Order } from "kiteconnect"
 import logger from "./logger"
 import { toIst, postToSlack } from "./utils"
-import { getPreviousTradingDay, placeKiteOrder, getKiteInstance, cancelOrder } from "./kiteUtils"
+import { getPreviousTradingDay, placeKiteOrder, getKiteInstance, cancelOrder, placeSL } from "./kiteUtils"
 import {
   getChaseStatus,
   updateChaseStatus,
   getSubscribeChaseJob,
 } from "./drizzleDbUtils"
-import { CHASE_STATUS, STATUS_TRIGGER_PENDING } from "./constants"
+import { CHASE_STATUS } from "./constants"
 
 export type ChaseInstrument = {
   tradingsymbol: string
@@ -163,28 +162,13 @@ export const generateSignal = async (
       logger.error("[generateSignal] error updating chase_status:", error)
     } else {
       const exitSide = currentStatus === CHASE_STATUS.LONG ? "SELL" : "BUY"
-      const kite = getKiteInstance(accessToken)
-      const allOrders = (await kite.getOrders()) as Order[]
-      const existingSLOrder = allOrders.find(
-        o =>
-          o.tradingsymbol === instrument.tradingsymbol &&
-          o.transaction_type === exitSide &&
-          o.status === STATUS_TRIGGER_PENDING
-      )
-      if (existingSLOrder) {
-        await kite.modifyOrder("regular", existingSLOrder.order_id, {
-          trigger_price: stoploss,
-          price: exitSide === "SELL" ? stoploss - 5 : stoploss + 5,
-        } as any)
-        logger.info(
-          `[generateSignal] modified SL order ${existingSLOrder.order_id} to ${stoploss} for ${instrument.tradingsymbol}`
-        )
-      } else {
-        logger.info(
-          `[generateSignal] no pending SL order found for ${instrument.tradingsymbol} — skipping order modification`
-        )
-      }
+      const subscribeChaseJob = await getSubscribeChaseJob()
+      const lots = subscribeChaseJob?.lots ?? 0
+      const quantity = lots * (instrument.lotSize ?? 1)
+      await placeSL(instrument.tradingsymbol, exitSide, quantity, accessToken, stoploss)
     }
+  } else if (currentStatus === CHASE_STATUS.AWAITING_SIGNAL && hour === 16) {
+    logger.info("[generateSignal] 4:15 PM EOD run — EMA stored, skipping signal generation")
   } else if (currentStatus === CHASE_STATUS.AWAITING_SIGNAL) {
     const longTolerance = instrument.ema ? 1.002 * instrument.ema : 0
     const shortTolerance = instrument.ema ? 0.998 * instrument.ema : 0
@@ -232,7 +216,7 @@ export const generateSignal = async (
       } else {
         await placeEntryTriggerOrder(instrument, "SELL", instrument.lowestLow, accessToken)
       }
-    } else if (hour !== 16) {
+    } else {
       await postToSlack(
         `:grey_question: Entry Signal Not Found. :hourglass_flowing_sand: Chase is AwaitingSignal`
       )
