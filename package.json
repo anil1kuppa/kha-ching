@@ -34,7 +34,7 @@
     "@opentelemetry/winston-transport": "^0.28.0",
     "@types/styled-jsx": "^3.4.4",
     "axios": "^0.21.1",
-    "bullmq": "^5.73.3",
+    "bullmq": "^6.0.9",
     "date-fns": "^2.19.0",
     "dayjs": "^1.10.4",
     "dotenv": "^10.0.0",
