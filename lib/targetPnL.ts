@@ -1,4 +1,3 @@
-import { Promise } from "bluebird"
 import dayjs from "dayjs"
 import type { KiteOrder } from "../types/kite"
 import type { ATM_STRADDLE_TRADE, ATM_STRANGLE_TRADE, SUPPORTED_TRADE_CONFIG } from "../types/trade"

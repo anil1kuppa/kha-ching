@@ -17,7 +17,6 @@ import type {
   Variety,
 } from "kiteconnect"
 
-import { Promise } from "bluebird"
 import { eq } from "drizzle-orm"
 import logger from "./logger"
 import type { COMPLETED_BY_TAG } from "./constants"
@@ -27,7 +26,7 @@ import { allSettled } from "./es6-promise"
 import { jobExecutions } from "./schema"
 import type { KiteOrder } from "../types/kite"
 import type { SignalXUser } from "../types/misc"
-import { millisecondsTill7, closest, finiteStateChecker, orderStateChecker, withRemoteRetry, isMockOrder, ms } from "./utils"
+import { millisecondsTill7, closest, delay, finiteStateChecker, orderStateChecker, RemoteRetryTimeoutError, withRemoteRetry, isMockOrder, ms } from "./utils"
 
 dayjs.extend(isSameOrBefore)
 
@@ -852,17 +851,19 @@ export const getTradingSymbolsByOptionPrice = async ({
     .map(idx => pivotStrike + idx * strikeStepSize)
     .sort((a, b) => a - b)
 
-  const instruments = await Promise.map(strikes, async (strike: number) => {
-    const tradingSymbolInterface = (await getExpiryTradingSymbol({
-      nfoSymbol,
-      strike,
-      instrumentType,
-      expiry,
-    })) as TradingSymbolInterface
-    const tradingsymbol = tradingSymbolInterface?.tradingsymbol
-    logger.info(`[getTradingSymbolsByOptionPrice] Trading symbol is ${tradingsymbol}`)
-    return { exchange: kite.EXCHANGE_NFO, tradingSymbol: tradingsymbol }
-  })
+  const instruments = await Promise.all(
+    strikes.map(async (strike: number) => {
+      const tradingSymbolInterface = (await getExpiryTradingSymbol({
+        nfoSymbol,
+        strike,
+        instrumentType,
+        expiry,
+      })) as TradingSymbolInterface
+      const tradingsymbol = tradingSymbolInterface?.tradingsymbol
+      logger.info(`[getTradingSymbolsByOptionPrice] Trading symbol is ${tradingsymbol}`)
+      return { exchange: kite.EXCHANGE_NFO, tradingSymbol: tradingsymbol }
+    })
+  )
 
   const priceDataByTradingSymbol = await getMultipleInstrumentPrices(instruments, user)
   const getStrike = (inst: string) => Number(inst.replace(nfoSymbol!, "").slice(5, 10))
@@ -925,11 +926,11 @@ export const remoteOrderSuccessEnsurer = async (args: {
 
   if (attemptCount >= retryAttempts) {
     logger.error("🔴 [remoteOrderSuccessEnsurer] all attempts exhausted. Terminating!")
-    throw Promise.TimeoutError
+    throw new RemoteRetryTimeoutError("remoteOrderSuccessEnsurer attempts exhausted")
   }
 
   if (attemptCount > 0) {
-    await Promise.delay(onFailureRetryAfterMs)
+    await delay(onFailureRetryAfterMs)
     logger.info("retry attempt", { attemptCount: attemptCount + 1, retryAttempts })
   }
 
@@ -987,16 +988,21 @@ export const remoteOrderSuccessEnsurer = async (args: {
       ? { order_id: "" }
       : await placeOrder(kite, kite.VARIETY_REGULAR, orderProps as PlaceOrderParams)
     const { order_id: ackOrderId } = orderAckResponse
-    const isOrderInUltimateStatePr = orderStateChecker(kite, ackOrderId, ensureOrderState)
+    const { promise: isOrderInUltimateStatePr, cancel: cancelOrderStateCheck } = orderStateChecker(
+      kite,
+      ackOrderId,
+      ensureOrderState
+    )
     try {
       const ultimateStateOrder = await finiteStateChecker(
         isOrderInUltimateStatePr,
-        orderStatusCheckTimeout
+        orderStatusCheckTimeout,
+        cancelOrderStateCheck
       )
       return { successful: true, response: [ultimateStateOrder] }
     } catch (e) {
       logger.error("🔴 [remoteOrderSuccessEnsurer] caught", e)
-      if (e instanceof Promise.TimeoutError) {
+      if (e instanceof RemoteRetryTimeoutError) {
         return { successful: false, response: [orderAckResponse] }
       }
       if (e?.message === kite.STATUS_REJECTED) {
@@ -1036,15 +1042,15 @@ export const remoteOrderSuccessEnsurer = async (args: {
           return remoteOrderSuccessEnsurer({ ...args, attemptCount: attemptCount + 1 })
         }
 
-        const isMatchedOrderInUltimateStatePr = orderStateChecker(
-          kite,
-          matchedOrder.order_id,
-          ensureOrderState
-        )
+        const {
+          promise: isMatchedOrderInUltimateStatePr,
+          cancel: cancelMatchedOrderStateCheck,
+        } = orderStateChecker(kite, matchedOrder.order_id, ensureOrderState)
         try {
           const ultimateStateOrder = await finiteStateChecker(
             isMatchedOrderInUltimateStatePr,
-            orderStatusCheckTimeout
+            orderStatusCheckTimeout,
+            cancelMatchedOrderStateCheck
           )
           return { successful: true, response: [ultimateStateOrder] }
         } catch (e) {
@@ -1221,7 +1227,7 @@ export async function cancelOrder(
     )
     return
   }
-  await kite.cancelOrder("regular", orderToCancel.order_id)
+  await kite.cancelOrder(kite.VARIETY_REGULAR, orderToCancel.order_id)
   logger.info(`[cancelOrder] Cancelled order ${orderToCancel.order_id} for ${tradingsymbol}`)
 }
 
@@ -1233,7 +1239,7 @@ export async function placeKiteOrder(
   params: PlaceOrderParams
 ): Promise<any> {
   const kite = getKiteInstance(accessToken)
-  return placeOrder(kite, "regular", params)
+  return placeOrder(kite, kite.VARIETY_REGULAR, params)
 }
 
 /**
@@ -1297,23 +1303,24 @@ export async function placeSL(
 
   if (stoplossBreached) {
     logger.warn(`[placeSL] Stoploss ${stoploss} already breached for ${tradingsymbol}, placing market order`)
-    await placeOrder(kite, "regular", {
+    await placeOrder(kite, kite.VARIETY_REGULAR, {
       tradingsymbol,
-      exchange: "NFO",
+      exchange: kite.EXCHANGE_NFO,
       transaction_type: transactionType,
       quantity,
-      order_type: "MARKET",
-      product: "NRML",
+      order_type: kite.ORDER_TYPE_LIMIT,
+      product: kite.PRODUCT_NRML,
+      price: ltp,
       tag: "chase",
     } as PlaceOrderParams)
   } else {
-    await placeOrder(kite, "regular", {
+    await placeOrder(kite, kite.VARIETY_REGULAR, {
       tradingsymbol,
-      exchange: "NFO",
+      exchange: kite.EXCHANGE_NFO,
       transaction_type: transactionType,
       quantity,
-      order_type: "SL",
-      product: "NRML",
+      order_type: kite.ORDER_TYPE_SL,
+      product: kite.PRODUCT_NRML,
       tag: "chase",
       trigger_price: stoploss,
       price,
