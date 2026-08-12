@@ -1,6 +1,4 @@
 import axios from "axios"
-import type Bluebird from "bluebird"
-import { any, Promise } from "bluebird"
 import dayjs, { type Dayjs } from "dayjs"
 import type { KiteOrder } from "../types/kite"
 import {
@@ -12,8 +10,6 @@ import { getLatestAccessToken, storeAccessToken } from "./drizzleDbUtils"
 import { allSettled, type allSettledInterface } from "./es6-promise"
 import logger from "./logger"
 import { COMPLETED_ORDER_RESPONSE } from "./strategies/mockData/orderResponse"
-
-Promise.config({ cancellation: true, warnings: true })
 
 import isSameOrBefore from "dayjs/plugin/isSameOrBefore"
 import timezone from "dayjs/plugin/timezone"
@@ -87,7 +83,7 @@ export async function postToSlack(message: string): Promise<void> {
  * Promise-based delay for async flows.
  * @param ms - milliseconds to wait
  */
-export const delay = ms =>
+export const delay = (ms: number): Promise<void> =>
   new Promise(resolve =>
     setTimeout(() => {
       resolve()
@@ -481,131 +477,155 @@ export const isUntestedFeaturesEnabled = () =>
   process.env.ENABLE_UNTESTED_FEATURES ? JSON.parse(process.env.ENABLE_UNTESTED_FEATURES) : false
 
 /**
- * Run a promise with a timeout and cancel it on timeout.
+ * Signal that a `finiteStateChecker`/`withRemoteRetry` operation exceeded its time budget.
  */
-export const finiteStateChecker = async (
-  infinitePr: Bluebird<any>,
-  checkDurationMs: number
-): Promise<any | Error> => {
-  return infinitePr.timeout(checkDurationMs).catch(e => {
-    // cleanup infinitePr
-    infinitePr.cancel()
-    // and then rethrow for parent task
-    throw e
+export class RemoteRetryTimeoutError extends Error {}
+
+/**
+ * Run a promise with a timeout, invoking `onTimeout` (e.g. to cancel a poller) if it fires.
+ */
+export const finiteStateChecker = async <T>(
+  pr: globalThis.Promise<T>,
+  checkDurationMs: number,
+  onTimeout?: () => void
+): globalThis.Promise<T> => {
+  let timeoutHandle: ReturnType<typeof setTimeout>
+  const timeoutPromise = new globalThis.Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(() => {
+      onTimeout?.()
+      reject(new RemoteRetryTimeoutError(`finiteStateChecker timed out after ${checkDurationMs}ms`))
+    }, checkDurationMs)
   })
+
+  try {
+    return await globalThis.Promise.race([pr, timeoutPromise])
+  } finally {
+    clearTimeout(timeoutHandle!)
+  }
 }
 
 /**
  * Retry a remote function until successful, with timeout and retry logic.
  */
 export const withRemoteRetry = async (remoteFn: any, timeoutMs = ms(60)): Promise<any> => {
-  const remoteFnExecution = () =>
-    new Promise((resolve, reject, onCancel) => {
-      let cancelled = false
-      const fn = async () => {
-        if (cancelled) {
-          return false
-        }
-        try {
-          const isRemoteFnPromise = remoteFn && typeof (remoteFn as any).then == "function" // eslint-disable-line
-          const res = await (isRemoteFnPromise ? remoteFn : remoteFn())
-          return res
-        } catch (e) {
-          if (e?.isAxiosError) {
-            if (e?.response?.status === 401) {
-              return reject(new Error(ERROR_STRINGS.PAID_STRATEGY))
-            }
-          }
+  let cancelled = false
 
-          if (e?.error_type === "TokenException" || e?.error_type === "PermissionException") {
-            logger.error(`withRemoteRetry TokenException — api_key: ${KITE_API_KEY}`, e)
-            return reject(e)
-          }
-
-          logger.error(`withRemoteRetry attempt failed for ${remoteFn}`, e)
-          await Promise.delay(ms(2))
-          return fn()
-        }
+  const attempt = async (): Promise<any> => {
+    if (cancelled) {
+      return
+    }
+    try {
+      const isRemoteFnPromise = remoteFn && typeof (remoteFn as any).then == "function" // eslint-disable-line
+      return await (isRemoteFnPromise ? remoteFn : remoteFn())
+    } catch (e) {
+      if (e?.isAxiosError && e?.response?.status === 401) {
+        throw new Error(ERROR_STRINGS.PAID_STRATEGY)
       }
 
-      fn()
-        .then(res => {
-          resolve(res)
-        })
-        .catch(e => reject(e))
+      if (e?.error_type === "TokenException" || e?.error_type === "PermissionException") {
+        logger.error(`withRemoteRetry TokenException — api_key: ${KITE_API_KEY}`, e)
+        throw e
+      }
 
-      onCancel!(() => {
-        cancelled = true
-      })
-    })
+      logger.error(`withRemoteRetry attempt failed for ${remoteFn}`, e)
+      if (cancelled) {
+        throw e
+      }
+      await delay(ms(2))
+      return attempt()
+    }
+  }
 
-  const remoteFnExecutionPr = remoteFnExecution()
-  const response = await finiteStateChecker(remoteFnExecutionPr, timeoutMs)
-  return response
+  let timeoutHandle: ReturnType<typeof setTimeout>
+  const timeoutPromise = new globalThis.Promise((_, reject) => {
+    timeoutHandle = setTimeout(() => {
+      cancelled = true
+      reject(new RemoteRetryTimeoutError(`withRemoteRetry timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
+  })
+
+  try {
+    return await globalThis.Promise.race([attempt(), timeoutPromise])
+  } finally {
+    clearTimeout(timeoutHandle!)
+  }
 }
 
 /**
  * Poll broker order history until a desired order state is observed or rejected.
+ * Returns `{ promise, cancel }` — pass `cancel` to `finiteStateChecker`'s `onTimeout`
+ * so polling actually stops once the caller gives up waiting.
  */
-export const orderStateChecker = (kite, orderId, ensureOrderState) => {
+export const orderStateChecker = (
+  kite,
+  orderId,
+  ensureOrderState
+): { promise: globalThis.Promise<any>; cancel: () => void } => {
+  let cancelled = false
+
   /**
    * if broker responds back with order history,
    * but is not in expected state (fn arg) and is also not in failure states (REJECTED or CANCELLED)
    * then keep retrying for it to enter either of those states
    */
-  return new Promise((resolve, reject, onCancel) => {
-    let cancelled = false
-    const fn = async () => {
+  const fn = async () => {
+    if (cancelled) {
+      return false
+    }
+    try {
+      const orderHistory = await withRemoteRetry(() => kite.getOrderHistory(orderId))
+      const byRecencyOrderHistory = orderHistory.reverse()
+      // if it reaches here, then order exists in broker system
+
+      const expectedStateOrder = byRecencyOrderHistory.find(
+        odr => odr.status === ensureOrderState
+      )
+
+      if (expectedStateOrder) {
+        return expectedStateOrder
+      }
+
+      logger.error("🔴 [orderStateChecker] invalid state...", {
+        orderId,
+        ensureOrderState,
+      })
+      logDeep(orderHistory)
+
+      const wasOrderRejectedOrCancelled = byRecencyOrderHistory.find(
+        odr => odr.status === kite.STATUS_REJECTED || odr.status === kite.STATUS_CANCELLED
+      )
+
+      if (wasOrderRejectedOrCancelled) {
+        logger.error("🔴 [orderStateChecker] rejected or cancelled", byRecencyOrderHistory)
+        throw new Error(kite.STATUS_REJECTED)
+      }
+
+      // in every other case, retry until its status changes to either of above states
       if (cancelled) {
         return false
       }
-      try {
-        const orderHistory = await withRemoteRetry(() => kite.getOrderHistory(orderId))
-        const byRecencyOrderHistory = orderHistory.reverse()
-        // if it reaches here, then order exists in broker system
-
-        const expectedStateOrder = byRecencyOrderHistory.find(
-          odr => odr.status === ensureOrderState
-        )
-
-        if (expectedStateOrder) {
-          return expectedStateOrder
-        }
-
-        logger.error("🔴 [orderStateChecker] invalid state...", {
-          orderId,
-          ensureOrderState,
-        })
-        logDeep(orderHistory)
-
-        const wasOrderRejectedOrCancelled = byRecencyOrderHistory.find(
-          odr => odr.status === kite.STATUS_REJECTED || odr.status === kite.STATUS_CANCELLED
-        )
-
-        if (wasOrderRejectedOrCancelled) {
-          logger.error("🔴 [orderStateChecker] rejected or cancelled", byRecencyOrderHistory)
-          throw new Error(kite.STATUS_REJECTED)
-        }
-
-        // in every other case, retry until its status changes to either of above states
-        await Promise.delay(ms(2))
-        return fn()
-      } catch (e) {
-        logger.error("🔴 [orderStateChecker] caught", e)
-        if (
-          e?.message === kite.STATUS_REJECTED ||
-          (e?.status === "error" &&
-            e?.error_type === "GeneralException" &&
-            e?.message === "Couldn't find that `order_id`.")
-        ) {
-          throw new Error(kite.STATUS_REJECTED)
-        }
-        // for other exceptions like network layer, retry
-        await Promise.delay(ms(2))
-        return fn()
+      await delay(ms(2))
+      return fn()
+    } catch (e) {
+      logger.error("🔴 [orderStateChecker] caught", e)
+      if (
+        e?.message === kite.STATUS_REJECTED ||
+        (e?.status === "error" &&
+          e?.error_type === "GeneralException" &&
+          e?.message === "Couldn't find that `order_id`.")
+      ) {
+        throw new Error(kite.STATUS_REJECTED)
       }
+      // for other exceptions like network layer, retry
+      if (cancelled) {
+        throw e
+      }
+      await delay(ms(2))
+      return fn()
     }
+  }
 
+  const promise = new globalThis.Promise((resolve, reject) => {
     fn()
       .then(resolve)
       .catch(e => {
@@ -614,11 +634,14 @@ export const orderStateChecker = (kite, orderId, ensureOrderState) => {
           reject(e)
         }
       })
-
-    onCancel!(() => {
-      cancelled = true
-    })
   })
+
+  return {
+    promise,
+    cancel: () => {
+      cancelled = true
+    },
+  }
 }
 
 /**

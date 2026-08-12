@@ -3,7 +3,7 @@ import dayjs from "dayjs"
 import type { HistoricalData, Order } from "kiteconnect"
 import logger from "../logger"
 import { CHASE_Q_NAME, redisConnection } from "../queue"
-import { ms, toIst, postToSlack } from "../utils"
+import { ms, toIst, postToSlack, withRemoteRetry } from "../utils"
 import {
   getFnOExpiries,
   calculateEma,
@@ -169,7 +169,9 @@ async function processUpdateSL(job: Job) {
   ) {
     const prevRow = await getLatestEma(tradingsymbol)
 
-    const previousTradingDayDayjs = toIst(await getPreviousTradingDay(accessToken))
+    const previousTradingDayDayjs = toIst(
+      await withRemoteRetry(async () => getPreviousTradingDay(accessToken), ms(40))
+    )
     const previousTradingDay = previousTradingDayDayjs.format("YYYY-MM-DD")
     const prevEmaTarget = previousTradingDayDayjs.startOf("day")
       .set("hour", 16).set("minute", 15).set("second", 0).set("millisecond", 0)
@@ -180,13 +182,19 @@ async function processUpdateSL(job: Job) {
 
     if (!isValidPrevRow) {
       logger.info(`[processUpdateSL] prevRow not from previous trading day at 4:15 PM IST, calculating EMA freshly`)
-      result = await calculateEma(activeInstrumentData as any, null, accessToken)
+      result = await withRemoteRetry(async () =>
+        calculateEma(activeInstrumentData as any, null, accessToken),
+        ms(40)
+      )
     } else {
-      const candles = (await kite.getHistoricalData(
-        instrumentToken,
-        "60minute",
-        nowIst.subtract(1, "hour").toDate(),
-        nowIst.toDate()
+      const candles = (await withRemoteRetry(async () =>
+        kite.getHistoricalData(
+          instrumentToken,
+          "60minute",
+          nowIst.subtract(1, "hour").toDate(),
+          nowIst.toDate()
+        ),
+        ms(40)
       )) as HistoricalData[]
       if (!Array.isArray(candles) || !candles.length) {
         logger.error(`[processUpdateSL] no candles for ${tradingsymbol}`)
@@ -502,6 +510,10 @@ const worker = new Worker(
 
 worker.on("error", err => {
   logger.error("🔴 [chaseQueue] worker error", err)
+})
+
+worker.on("failed", (job, err) => {
+  logger.error(`🔴 [chaseQueue] job ${job?.id} (${job?.name}) failed`, err)
 })
 
 export default worker

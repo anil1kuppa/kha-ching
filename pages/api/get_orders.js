@@ -1,7 +1,6 @@
 import axios from "axios"
 import dayjs from "dayjs"
 import { uniqBy } from "lodash"
-import { Promise } from "bluebird"
 
 import withSession from "../../lib/session"
 import { syncGetKiteInstance, getCurrentExpiryTradingSymbol } from "../../lib/kiteUtils"

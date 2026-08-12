@@ -8,11 +8,10 @@
  * not from the moment the order went in Open state (via the API)
  */
 
-import { Promise } from "bluebird"
 import type { SignalXUser } from "../../types/misc"
 import { syncGetKiteInstance } from "../kiteUtils"
 import logger from "../logger"
-import { finiteStateChecker, ms, orderStateChecker, withRemoteRetry } from "../utils"
+import { finiteStateChecker, ms, orderStateChecker, RemoteRetryTimeoutError, withRemoteRetry } from "../utils"
 
 const sllWatcher = async ({ sllOrderId, user }: { sllOrderId: string; user: SignalXUser }) => {
   try {
@@ -36,13 +35,14 @@ const sllWatcher = async ({ sllOrderId, user }: { sllOrderId: string; user: Sign
     }
 
     const timeout = ms(30)
-    const orderCompletionCheckerPr = orderStateChecker(kite, sllOrderId, kite.STATUS_COMPLETE)
+    const { promise: orderCompletionCheckerPr, cancel: cancelOrderCompletionCheck } =
+      orderStateChecker(kite, sllOrderId, kite.STATUS_COMPLETE)
     try {
-      await finiteStateChecker(orderCompletionCheckerPr, timeout)
+      await finiteStateChecker(orderCompletionCheckerPr, timeout, cancelOrderCompletionCheck)
       // order found to be completed after open
       return Promise.resolve("[sllWatcher] order Completed after Open")
     } catch (e) {
-      if (e instanceof Promise.TimeoutError) {
+      if (e instanceof RemoteRetryTimeoutError) {
         // order not filled after timeout seconds
         // place market orders
         logger.info("🟢 [sllWatcher] squaring off open SLL order id", sllOrderId)
