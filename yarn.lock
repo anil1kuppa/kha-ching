@@ -3913,13 +3913,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/bluebird@npm:^3.5.36":
-  version: 3.5.42
-  resolution: "@types/bluebird@npm:3.5.42"
-  checksum: 10c0/ce752a5e277bbc0cdee3dee9c875ac093d1331905a8a5175665ccb8cb76b7b95a84836f92bc46076c2fd1e384a107866893eeeb20f6fb33427482663879faf93
-  languageName: node
-  linkType: hard
-
 "@types/cookie@npm:^0.4.0":
   version: 0.4.1
   resolution: "@types/cookie@npm:0.4.1"
@@ -4719,13 +4712,6 @@ __metadata:
   version: 2.3.0
   resolution: "binary-extensions@npm:2.3.0"
   checksum: 10c0/75a59cafc10fb12a11d510e77110c6c7ae3f4ca22463d52487709ca7f18f69d886aa387557cc9864fbdb10153d0bdb4caacabf11541f55e89ed6e18d12ece2b5
-  languageName: node
-  linkType: hard
-
-"bluebird@npm:^3.7.2":
-  version: 3.7.2
-  resolution: "bluebird@npm:3.7.2"
-  checksum: 10c0/680de03adc54ff925eaa6c7bb9a47a0690e8b5de60f4792604aae8ed618c65e6b63a7893b57ca924beaf53eee69c5af4f8314148c08124c550fe1df1add897d2
   languageName: node
   linkType: hard
 
@@ -8683,7 +8669,6 @@ __metadata:
     "@opentelemetry/sdk-node": "npm:^0.218.0"
     "@opentelemetry/winston-transport": "npm:^0.28.0"
     "@types/babel__core": "npm:^7"
-    "@types/bluebird": "npm:^3.5.36"
     "@types/node": "npm:25.6.0"
     "@types/prop-types": "npm:^15"
     "@types/react": "npm:17.0.0"
@@ -8692,7 +8677,6 @@ __metadata:
     axios: "npm:^0.21.1"
     axios-mock-adapter: "npm:^1.19.0"
     babel-jest: "npm:^27.0.6"
-    bluebird: "npm:^3.7.2"
     bullmq: "npm:^5.73.3"
     date-fns: "npm:^2.19.0"
     dayjs: "npm:^1.10.4"
