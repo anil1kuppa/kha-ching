@@ -59,7 +59,7 @@
     "redis": "^3.1.2",
     "redis-memoizer": "^1.0.2",
     "styled-jsx": "^5.1.7",
-    "swr": "^2.2.0",
+    "swr": "^2.4.2",
     "trace-unhandled": "^2.0.1",
     "uuid": "^8.3.2",
     "winston": "^3.7.2"
