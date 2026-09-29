@@ -1,4 +1,3 @@
-import { OpenTelemetryTransportV3 } from "@opentelemetry/winston-transport"
 import { createLogger, format, transports } from "winston"
 
 const formatMeta = meta => {
@@ -29,7 +28,6 @@ const splatIntoMessage = format(info => {
 const logger = createLogger({
   transports: [
     new transports.Console(),
-    new OpenTelemetryTransportV3({ format: format.combine(splatIntoMessage) }),
   ],
   format: format.combine(
     format.splat(),

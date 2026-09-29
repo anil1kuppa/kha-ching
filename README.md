@@ -18,7 +18,7 @@ SignalX is a trading app for anyone looking to diversify their funds into system
 
 3. **Node.js** — v20+ (use [nvm](https://github.com/nvm-sh/nvm) to install).
 
-4. **Yarn** — v4 (`npm install -g yarn`).
+4. **pnpm** — v10 (`corepack enable`).
 
 5. **PostgreSQL 16** — Install on the VPS:
    ```bash
@@ -35,7 +35,6 @@ SignalX is a trading app for anyone looking to diversify their funds into system
    sudo systemctl start redis-server
    ```
 
-7. **Grafana Cloud** (optional, for observability) — Sign up at https://grafana.com/products/cloud/. Navigate to **Connections → OpenTelemetry** to get your OTLP endpoint and API token.
 
 ---
 
@@ -46,7 +45,7 @@ SignalX is a trading app for anyone looking to diversify their funds into system
 ```bash
 git clone https://github.com/anil1kuppa/kha-ching.git
 cd kha-ching
-yarn install
+pnpm install
 ```
 
 ### 2. Configure environment variables
@@ -68,20 +67,18 @@ Refer to [.env.example](.env.example) for all available variables and their desc
 | `SECRET_COOKIE_PASSWORD` | Random 32+ character string for session encryption |
 | `TZ` | Must be `Asia/Kolkata` |
 | `MOCK_ORDERS` | Set `true` during testing — skips real order placement |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | Grafana Cloud OTLP endpoint (optional) |
-| `OTEL_EXPORTER_OTLP_HEADERS` | Grafana Cloud auth header (optional) |
 
 ### 3. Apply database migrations
 
 ```bash
-yarn drizzle:push
+pnpm drizzle:push
 ```
 
 ### 4. Build and start
 
 ```bash
-yarn build
-yarn start
+pnpm build
+pnpm start
 ```
 
 The app runs on port `3000` by default. Use a reverse proxy (nginx, Caddy) to expose it over HTTPS.
@@ -129,15 +126,15 @@ Default SLM BUY order percentage placed after an initial order fills. Changeable
 ## Development
 
 ```bash
-yarn dev    # starts dev server with OTEL instrumentation
+pnpm dev    # starts the development server
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser. Set `MOCK_ORDERS=true` to avoid placing real orders during development.
 
 ```bash
-yarn test       # all tests
-yarn unit-test  # unit tests only
-yarn int-test   # integration tests (requires running Postgres + Redis)
+pnpm test       # all tests
+pnpm unit-test  # unit tests only
+pnpm int-test   # integration tests (requires running Postgres + Redis)
 ```
 
 ---
