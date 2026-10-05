@@ -10,23 +10,23 @@ Algorithmic trading toolkit for systematic intraday trading on Indian stock mark
 - **Queue:** BullMQ 5 with IORedis (`lib/queue.ts`, `lib/queue-processor/`)
 - **Broker:** Zerodha Kite Connect (`lib/kiteUtils.ts`, `lib/broker.js`)
 - **Auth:** next-iron-session (encrypted cookies)
-- **Observability:** OpenTelemetry → Grafana Cloud (`otel.js`)
+- **Observability:** Application logs are written to stdout/stderr for Alloy collection
 - **Server:** Express (`server.js`) with Bull Board at `/queues`
-- **Package manager:** Yarn 4 (use `yarn`, not `npm`)
+- **Package manager:** pnpm 10 (use `pnpm`, not `npm`)
 
 ## Commands
 
 ```bash
-yarn dev           # Dev server (with OTEL instrumentation)
-yarn build         # Production build
-yarn start         # Production server (sets TZ=Asia/Kolkata, runs bootup health check)
-yarn lint          # Biome linter
-yarn format        # Biome formatter
-yarn test          # All tests (Jest)
-yarn unit-test     # Unit tests only
-yarn int-test      # Integration tests only
-yarn drizzle:generate  # Generate DB migrations
-yarn drizzle:push      # Apply migrations to DB
+pnpm dev           # Dev server
+pnpm build         # Production build
+pnpm start         # Production server (sets TZ=Asia/Kolkata, runs bootup health check)
+pnpm lint          # Biome linter
+pnpm format        # Biome formatter
+pnpm test          # All tests (Jest)
+pnpm unit-test     # Unit tests only
+pnpm int-test      # Integration tests only
+pnpm drizzle:generate  # Generate DB migrations
+pnpm drizzle:push      # Apply migrations to DB
 ```
 
 ## Architecture
@@ -87,14 +87,13 @@ Copy `.env.example` to `.env`. Required vars:
 Production deployment uses multi-stage Docker build:
 
 ```bash
-docker compose up          # Full local stack (Postgres, Redis, OTEL Collector, app)
+docker compose up          # Full local stack (Postgres, Redis, app)
 docker compose up app      # App only (expects external Postgres/Redis)
 ```
 
 Services in `docker-compose.yml`:
 - `postgres:16-alpine` on port 5432
 - `redis:7-alpine` on port 6379
-- `otel-collector` for telemetry
 - `app` (dev profile via `COMPOSE_PROFILES=local`)
 
 Health check endpoint: `GET /api/health`
@@ -102,9 +101,9 @@ Health check endpoint: `GET /api/health`
 ## Testing
 
 ```bash
-yarn test           # All suites
-yarn unit-test      # Faster, unit only (--detectOpenHandles)
-yarn int-test       # Integration (needs running DB/Redis)
+pnpm test           # All suites
+pnpm unit-test      # Faster, unit only (--detectOpenHandles)
+pnpm int-test       # Integration (needs running DB/Redis)
 ```
 
 Test setup: `__tests__/setupEnv.ts`. Coverage collected from `pages/**` and `lib/**`.

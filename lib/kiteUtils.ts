@@ -9,6 +9,7 @@ import memoizer from "memoizee"
 
 import { KiteConnect, HistoricalData } from "kiteconnect"
 import type {
+  AutosliceOrderResponse,
   Connect,
   Exchanges,
   Instrument,
@@ -306,10 +307,10 @@ export async function placeOrder(
   kite: KiteConnectInstance,
   variety: Variety,
   order: PlaceOrderParams
-): Promise<any> {
+): Promise<AutosliceOrderResponse> {
   return kite.placeOrder(variety, {
     ...order,
-    market_protection: (order as any).market_protection ?? 2,
+    market_protection: (order as any).market_protection ?? -1,
   } as PlaceOrderParams)
 }
 
@@ -988,6 +989,7 @@ export const remoteOrderSuccessEnsurer = async (args: {
       ? { order_id: "" }
       : await placeOrder(kite, kite.VARIETY_REGULAR, orderProps as PlaceOrderParams)
     const { order_id: ackOrderId } = orderAckResponse
+    logger.info(`[remoteOrderSuccessEnsurer] Order ack received for orderId ${ackOrderId} and tag ${orderProps.tag}`)
     const { promise: isOrderInUltimateStatePr, cancel: cancelOrderStateCheck } = orderStateChecker(
       kite,
       ackOrderId,
@@ -1003,7 +1005,7 @@ export const remoteOrderSuccessEnsurer = async (args: {
     } catch (e) {
       logger.error("🔴 [remoteOrderSuccessEnsurer] caught", e)
       if (e instanceof RemoteRetryTimeoutError) {
-        return { successful: false, response: [orderAckResponse] }
+        return { successful: false, response: [orderAckResponse as unknown as KiteOrder] }
       }
       if (e?.message === kite.STATUS_REJECTED) {
         logger.info("🟢 [remoteOrderSuccessEnsurer] retrying rejected order", orderProps)

@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node --require ./otel.js server.js",
+    "dev": "node server.js",
     "build": "next build",
     "migrate": "node scripts/migrate.mjs",
-    "start": "node ./bootup.js & TZ=Asia/Kolkata node --require ./otel.js server.js",
+    "start": "node ./bootup.js & TZ=Asia/Kolkata node server.js",
     "lint": "biome lint .",
     "format": "biome format . --write",
     "test": "jest ./__tests__ --testPathIgnorePatterns support/*",
@@ -28,10 +28,6 @@
     "@mui/material": "^5.15.0",
     "@mui/system": "^5.15.0",
     "@mui/x-date-pickers": "^5.0.0",
-    "@opentelemetry/exporter-logs-otlp-http": "^0.218.0",
-    "@opentelemetry/sdk-logs": "^0.218.0",
-    "@opentelemetry/sdk-node": "^0.218.0",
-    "@opentelemetry/winston-transport": "^0.28.0",
     "@types/styled-jsx": "^3.4.4",
     "axios": "^0.21.1",
     "bullmq": "^5.73.3",
@@ -42,7 +38,7 @@
     "esm": "^3.2.25",
     "express": "^5.2.1",
     "fast-safe-stringify": "^2.1.1",
-    "ioredis": "^4.22.0",
+    "ioredis": "^5.11.1",
     "kiteconnect": "5.3.0",
     "lodash": "^4.17.21",
     "memoizee": "^0.4.15",
@@ -93,5 +89,5 @@
   "cacheDirectories": [
     ".next/cache"
   ],
-  "packageManager": "yarn@4.15.0"
+  "packageManager": "pnpm@10.15.1"
 }

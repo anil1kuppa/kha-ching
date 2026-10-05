@@ -15,14 +15,6 @@ const handle = app.getRequestHandler()
 
 // NB: must match lib/session.ts (cookieName/password). Kept in sync manually because
 // server.js runs as plain Node (no TS transform) and can't import that file directly.
-const sessionMiddleware = ironSession({
-  password: process.env.SECRET_COOKIE_PASSWORD,
-  cookieName: "khaching/kite/session",
-  cookieOptions: {
-    secure: process.env.NODE_ENV === "production",
-  },
-})
-
 function requireLoggedInUser(req, res, next) {
   const user = req.session.get("user")
   if (!user) {
@@ -31,7 +23,7 @@ function requireLoggedInUser(req, res, next) {
   return next()
 }
 
-async function setupBullBoard(server) {
+async function setupBullBoard(server, sessionMiddleware) {
   const redisUrl = process.env.REDIS_URL
   const QID = process.env.KITE_API_KEY
 
@@ -69,9 +61,16 @@ async function setupBullBoard(server) {
 }
 
 app.prepare().then(async () => {
+  const sessionMiddleware = ironSession({
+    password: process.env.SECRET_COOKIE_PASSWORD,
+    cookieName: "khaching/kite/session",
+    cookieOptions: {
+      secure: process.env.NODE_ENV === "production",
+    },
+  })
   const server = express()
 
-  await setupBullBoard(server)
+  await setupBullBoard(server, sessionMiddleware)
 
   server.all("/{*path}", (req, res) => handle(req, res))
 
