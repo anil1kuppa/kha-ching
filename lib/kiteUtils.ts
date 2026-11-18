@@ -217,11 +217,15 @@ export async function calculateEma(
 
   if (prevEma === null) {
     // If no previous EMA, we need at least 40 candles to calculate the initial SMA
-candles = await kite.getHistoricalData(
-      instrumentToken,
-      "60minute",
-      now.subtract(50, "day").toDate(),
-      now.toDate()
+    candles = await withRemoteRetry(
+      () =>
+        kite.getHistoricalData(
+          instrumentToken,
+          "60minute",
+          now.subtract(50, "day").toDate(),
+          now.toDate()
+        ),
+      ms(40)
     )
 
     if (!Array.isArray(candles) || candles.length < 40) {
@@ -236,11 +240,15 @@ candles = await kite.getHistoricalData(
     }
   } else {
     // If we have a previous EMA, we can calculate the new EMA with just the latest candle, but we still need to fetch the latest candle to get the current price and high/low for the day
-    candles = await kite.getHistoricalData(
-      instrumentToken,
-      "60minute",
-      now.subtract(4, "day").toDate(),
-      now.toDate()
+    candles = await withRemoteRetry(
+      () =>
+        kite.getHistoricalData(
+          instrumentToken,
+          "60minute",
+          now.subtract(4, "day").toDate(),
+          now.toDate()
+        ),
+      ms(40)
     )
 
     if (!Array.isArray(candles) || candles.length === 0) {
